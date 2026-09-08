@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     trial_days: int = 7
 
+    google_play_package_name: str = ""
+    google_play_monthly_product_id: str = "finpilot_pro_monthly"
+    google_play_yearly_product_id: str = "finpilot_pro_yearly"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="FINPILOT_",
