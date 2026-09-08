@@ -88,3 +88,9 @@ class TransferCreate(BaseModel):
 class TransferResponse(BaseModel):
     outgoing: TransactionResponse
     incoming: TransactionResponse
+
+
+class NetWorthResponse(BaseModel):
+    account_assets: Decimal
+    liabilities: Decimal
+    net_worth: Decimal
