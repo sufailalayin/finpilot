@@ -34,6 +34,7 @@ class SavingsGoal(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(120))
+    goal_type: Mapped[str] = mapped_column(String(40), default="other", nullable=False)
     target_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     current_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"), nullable=False)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
