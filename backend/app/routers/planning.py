@@ -17,6 +17,8 @@ from app.schemas.planning import (
     BudgetDashboard,
     BudgetPerformance,
     GoalContribution,
+    GoalDashboard,
+    GoalPlan,
     SavingsGoalCreate,
     SavingsGoalResponse,
 )
@@ -179,4 +181,71 @@ async def budget_dashboard(
         total_remaining=total_budget - total_spent,
         projected_total_spend=projected_total.quantize(Decimal("0.01")),
         budgets=rows,
+    )
+
+
+
+@router.get("/goals/dashboard", response_model=GoalDashboard)
+async def goal_dashboard(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GoalDashboard:
+    today = date.today()
+    goals = list(
+        (
+            await db.execute(
+                select(SavingsGoal)
+                .where(SavingsGoal.user_id == user.id)
+                .order_by(SavingsGoal.target_date.asc().nullslast(), SavingsGoal.created_at.desc())
+            )
+        ).scalars().all()
+    )
+
+    rows = []
+    total_target = Decimal("0.00")
+    total_saved = Decimal("0.00")
+
+    for goal in goals:
+        remaining = max(Decimal("0.00"), goal.target_amount - goal.current_amount)
+        progress = float(goal.current_amount / goal.target_amount * 100) if goal.target_amount > 0 else 0.0
+        months_remaining = None
+        required = None
+        state = "on_track"
+
+        if goal.current_amount >= goal.target_amount:
+            state = "completed"
+        elif goal.target_date is not None:
+            if goal.target_date < today:
+                state = "overdue"
+                months_remaining = 0
+            else:
+                month_delta = (goal.target_date.year - today.year) * 12 + goal.target_date.month - today.month
+                months_remaining = max(month_delta, 1)
+                required = (remaining / Decimal(months_remaining)).quantize(Decimal("0.01"))
+                if months_remaining <= 2 and progress < 75:
+                    state = "needs_attention"
+
+        rows.append(
+            GoalPlan(
+                id=goal.id,
+                name=goal.name,
+                goal_type=goal.goal_type,
+                target_amount=goal.target_amount,
+                current_amount=goal.current_amount,
+                remaining_amount=remaining,
+                progress_pct=round(progress, 1),
+                target_date=goal.target_date,
+                months_remaining=months_remaining,
+                required_monthly_contribution=required,
+                status=state,
+            )
+        )
+        total_target += goal.target_amount
+        total_saved += goal.current_amount
+
+    return GoalDashboard(
+        total_target=total_target,
+        total_saved=total_saved,
+        total_remaining=max(Decimal("0.00"), total_target - total_saved),
+        goals=rows,
     )
