@@ -5,6 +5,11 @@ class SubscriptionService {
 
   final ApiClient _api;
 
+  Future<Map<String, dynamic>> features() async {
+    final response = await _api.dio.get('/subscriptions/features');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> status() async {
     final response = await _api.dio.get('/subscriptions/status');
     return Map<String, dynamic>.from(response.data as Map);
