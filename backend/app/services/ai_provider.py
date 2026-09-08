@@ -27,11 +27,22 @@ class AIProvider:
                 f" Your latest savings goal is {goal['name']}: "
                 f"₹{goal['current_amount']} saved toward ₹{goal['target_amount']}."
             )
+        health = context.get("financial_health", {})
+        wealth = context.get("wealth_summary", {})
+        debt = context.get("liabilities", [])
+        debt_line = (
+            f" You have ₹{wealth.get('liabilities', '0')} recorded liabilities."
+            if debt else
+            " You have no recorded liabilities."
+        )
         return (
             f"This month you recorded ₹{month['income']} income and "
             f"₹{month['expense']} expenses, leaving a net of ₹{month['net']}. "
-            f"{spending_line}{goal_line} "
-            "Add more transactions and budgets for a more precise FinPilot analysis."
+            f"Your estimated net worth is ₹{wealth.get('net_worth', '0')} and "
+            f"your financial health score is {health.get('score', 0)}/100 "
+            f"({health.get('grade', 'Not rated')}). "
+            f"{spending_line}{goal_line}{debt_line} "
+            "Use the recorded data as a guide and keep your balances, bills and goals updated."
         )
 
 
@@ -45,9 +56,15 @@ class OpenAIProvider(AIProvider):
         instructions = (
             "You are FinPilot AI, a personal finance assistant by Hastron Ventures. "
             "Use only supplied finance context for claims about the user's money. "
-            "Do not invent financial data. Be concise, practical, and non-judgmental. "
-            "Do not present outcomes as guaranteed financial advice. "
-            "If data is insufficient, say what is missing."
+            "You can reason across cash flow, current balances, net worth, assets, liabilities, "
+            "EMIs, budgets, goals, recurring commitments, bills, subscriptions, recent transactions "
+            "and the financial-health components. "
+            "When useful, show the calculation or assumptions behind an answer. "
+            "Prioritize specific next actions, but do not invent financial data or guarantee outcomes. "
+            "For affordability questions, compare the purchase with cash flow, bills, debt and goals. "
+            "For debt questions, consider EMI load and outstanding principal. "
+            "For savings questions, consider budget pressure, emergency buffer and target dates. "
+            "Be concise, practical, non-judgmental and clear when data is insufficient."
         )
         user_input = (
             "User question:\n" + question +
