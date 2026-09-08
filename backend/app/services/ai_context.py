@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 
@@ -97,6 +98,45 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         ).all()
     )
 
+    recurring = list(
+        (
+            await db.execute(
+                select(
+                    RecurringRule.name,
+                    RecurringRule.transaction_type,
+                    RecurringRule.amount,
+                    RecurringRule.frequency,
+                    RecurringRule.next_due_on,
+                )
+                .where(
+                    RecurringRule.user_id == user_id,
+                    RecurringRule.is_active.is_(True),
+                )
+                .order_by(RecurringRule.next_due_on.asc())
+                .limit(20)
+            )
+        ).all()
+    )
+
+    bills = list(
+        (
+            await db.execute(
+                select(
+                    BillReminder.name,
+                    BillReminder.amount,
+                    BillReminder.due_on,
+                    BillReminder.frequency,
+                )
+                .where(
+                    BillReminder.user_id == user_id,
+                    BillReminder.is_paid.is_(False),
+                )
+                .order_by(BillReminder.due_on.asc())
+                .limit(20)
+            )
+        ).all()
+    )
+
     return {
         "month": {
             "start": str(start),
@@ -130,5 +170,24 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 "target_date": str(target_date) if target_date else None,
             }
             for name, current_amount, target_amount, target_date in goals
+        ],
+        "recurring_cash_flow": [
+            {
+                "name": name,
+                "transaction_type": transaction_type,
+                "amount": str(amount),
+                "frequency": frequency,
+                "next_due_on": str(next_due_on),
+            }
+            for name, transaction_type, amount, frequency, next_due_on in recurring
+        ],
+        "upcoming_bills": [
+            {
+                "name": name,
+                "amount": str(amount),
+                "due_on": str(due_on),
+                "frequency": frequency,
+            }
+            for name, amount, due_on, frequency in bills
         ],
     }
