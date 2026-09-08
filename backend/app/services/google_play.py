@@ -1,9 +1,23 @@
+import asyncio
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from urllib.parse import quote
+
+import httpx
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 
 from app.core.config import get_settings
 
 settings = get_settings()
+
+ANDROID_PUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher"
+VALID_STATES = {
+    "SUBSCRIPTION_STATE_ACTIVE",
+    "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+    "SUBSCRIPTION_STATE_CANCELED",
+}
 
 
 @dataclass
@@ -14,14 +28,69 @@ class PlayVerificationResult:
     purchase_state: str
 
 
-class GooglePlayVerifier:
-    """
-    Google Play subscription verification boundary.
+def _parse_rfc3339(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized).astimezone(timezone.utc)
 
-    Production implementation should use the Google Play Developer API
-    with a server-side service account. The Android client must never
-    decide entitlement state on its own.
-    """
+
+def _extract_verification(
+    payload: dict,
+    *,
+    expected_product_id: str,
+    now: datetime | None = None,
+) -> PlayVerificationResult:
+    now = now or datetime.now(timezone.utc)
+    state = str(payload.get("subscriptionState") or "UNKNOWN")
+    line_items = payload.get("lineItems") or []
+
+    matching_items = [
+        item for item in line_items
+        if str(item.get("productId") or "") == expected_product_id
+    ]
+
+    expiry_candidates = [
+        _parse_rfc3339(item.get("expiryTime"))
+        for item in matching_items
+    ]
+    expiry_candidates = [value for value in expiry_candidates if value is not None]
+    expiry = max(expiry_candidates) if expiry_candidates else None
+
+    verified = (
+        state in VALID_STATES
+        and expiry is not None
+        and expiry > now
+        and bool(matching_items)
+    )
+
+    return PlayVerificationResult(
+        verified=verified,
+        product_id=expected_product_id,
+        expiry_time=expiry,
+        purchase_state=state,
+    )
+
+
+class GooglePlayVerifier:
+    async def _access_token(self) -> str:
+        if not settings.google_play_service_account_json:
+            raise RuntimeError("Google Play service account is not configured")
+
+        try:
+            info = json.loads(settings.google_play_service_account_json)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Google Play service account JSON is invalid") from exc
+
+        credentials = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=[ANDROID_PUBLISHER_SCOPE],
+        )
+
+        await asyncio.to_thread(credentials.refresh, Request())
+        if not credentials.token:
+            raise RuntimeError("Unable to obtain Google Play access token")
+        return credentials.token
 
     async def verify_subscription(
         self,
@@ -29,15 +98,48 @@ class GooglePlayVerifier:
         purchase_token: str,
     ) -> PlayVerificationResult:
         if not settings.google_play_package_name:
-            raise RuntimeError("Google Play verification is not configured")
+            raise RuntimeError("Google Play package name is not configured")
 
-        # Placeholder boundary until deployment credentials are connected.
-        # Never treat this fallback as a verified paid subscription.
-        return PlayVerificationResult(
-            verified=False,
-            product_id=product_id,
-            expiry_time=None,
-            purchase_state="unverified",
+        allowed_products = {
+            settings.google_play_monthly_product_id,
+            settings.google_play_yearly_product_id,
+        }
+        if product_id not in allowed_products:
+            return PlayVerificationResult(
+                verified=False,
+                product_id=product_id,
+                expiry_time=None,
+                purchase_state="PRODUCT_NOT_ALLOWED",
+            )
+
+        token = await self._access_token()
+        package_name = quote(settings.google_play_package_name, safe="")
+        purchase_token_encoded = quote(purchase_token, safe="")
+
+        url = (
+            "https://androidpublisher.googleapis.com/androidpublisher/v3/"
+            f"applications/{package_name}/purchases/subscriptionsv2/"
+            f"tokens/{purchase_token_encoded}"
+        )
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                url,
+                headers={"Authorization": "Bearer " + token},
+            )
+
+        if response.status_code == 404:
+            return PlayVerificationResult(
+                verified=False,
+                product_id=product_id,
+                expiry_time=None,
+                purchase_state="NOT_FOUND",
+            )
+
+        response.raise_for_status()
+        return _extract_verification(
+            response.json(),
+            expected_product_id=product_id,
         )
 
 
