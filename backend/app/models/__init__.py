@@ -1,4 +1,5 @@
 from app.models.ai import AIUsageEvent
+from app.models.asset import Asset
 from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction
 from app.models.liability import Liability, LiabilityPayment
@@ -14,6 +15,7 @@ __all__ = [
     "Budget",
     "SavingsGoal",
     "AIUsageEvent",
+    "Asset",
     "Liability",
     "LiabilityPayment",
     "RecurringRule",
