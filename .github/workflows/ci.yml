@@ -76,7 +76,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Build debug APK
         working-directory: /tmp/finpilot_mobile
-        run: flutter build apk --debug
+        run: flutter build apk --debug --dart-define=FINPILOT_API_BASE_URL=https://finpilot-backend-production-1cb7.up.railway.app/api/v1
       - name: Upload Android validation artifacts
         uses: actions/upload-artifact@v4
         with:
