@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.entitlements import require_pro_user
 from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
 from app.schemas.subscriptions import (
     GooglePlayVerifyRequest,
@@ -186,7 +187,7 @@ async def subscription_features(
         ("smart_alerts", "Smart financial alerts", True),
         ("assets_liabilities", "Assets, investments, loans & EMI analytics", True),
         ("health_score", "Financial Health Score 2.0", True),
-        ("security_plus", "Advanced security & privacy controls", True),
+        ("security_privacy", "Security & privacy controls", False),
     ]
 
     return SubscriptionFeaturesResponse(
