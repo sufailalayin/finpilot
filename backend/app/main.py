@@ -6,6 +6,7 @@ from app.core.production import validate_production_settings
 from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
 from app.routers.automation import router as automation_router
+from app.routers.assets import router as assets_router
 from app.routers.ai import router as ai_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
@@ -43,6 +44,7 @@ app.include_router(ai_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(automation_router, prefix="/api/v1")
+app.include_router(assets_router, prefix="/api/v1")
 app.include_router(subscriptions_router, prefix="/api/v1")
 
 
