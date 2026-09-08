@@ -23,12 +23,23 @@ class FinanceInsight(BaseModel):
     severity: str
 
 
+class HealthScoreComponent(BaseModel):
+    key: str
+    label: str
+    score: int
+    max_score: int
+    status: str
+    message: str
+
+
 class AnalyticsOverview(BaseModel):
     income: Decimal
     expenses: Decimal
     net: Decimal
     savings_rate: float
     financial_health_score: int
+    health_grade: str
+    health_components: list[HealthScoreComponent]
     top_categories: list[CategorySpend]
     budgets: list[BudgetProgress]
     insights: list[FinanceInsight]
