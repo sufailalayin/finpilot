@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
@@ -13,6 +14,18 @@ app = FastAPI(
     title="FinPilot API",
     version="0.1.0",
     description="Personal Finance AI by Hastron Ventures",
+)
+
+from app.core.config import get_settings
+
+settings = get_settings()
+origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(health_router, prefix="/api/v1")
