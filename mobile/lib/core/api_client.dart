@@ -8,7 +8,8 @@ class ApiClient {
           BaseOptions(
             baseUrl: baseUrl ?? const String.fromEnvironment(
               'FINPILOT_API_BASE_URL',
-              defaultValue: 'http://10.0.2.2:8000/api/v1',
+              defaultValue:
+                  'https://finpilot-backend-production-1cb7.up.railway.app/api/v1',
             ),
             connectTimeout: const Duration(seconds: 15),
             receiveTimeout: const Duration(seconds: 20),
