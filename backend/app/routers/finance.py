@@ -378,7 +378,9 @@ async def net_worth_summary(
     liabilities = liabilities or Decimal("0.00")
 
     return NetWorthResponse(
-        account_assets=account_assets + investment_assets,
+        account_assets=account_assets,
+        investment_assets=investment_assets,
+        total_assets=account_assets + investment_assets,
         liabilities=liabilities,
         net_worth=account_assets + investment_assets - liabilities,
     )
