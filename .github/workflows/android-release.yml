@@ -1,0 +1,105 @@
+name: FinPilot Android Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Generate Android scaffold
+        run: |
+          flutter create --platforms=android --org com.hastronventures --project-name finpilot /tmp/finpilot_release
+          rm -rf /tmp/finpilot_release/lib
+          rm -rf /tmp/finpilot_release/test
+          cp -R mobile/lib /tmp/finpilot_release/lib
+          cp mobile/pubspec.yaml /tmp/finpilot_release/pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: /tmp/finpilot_release
+        run: flutter pub get
+
+      - name: Configure release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/finpilot_release/android/app/upload-keystore.jks
+
+          cat > /tmp/finpilot_release/android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("/tmp/finpilot_release/android/app/build.gradle.kts")
+          text = path.read_text()
+
+          if 'import java.util.Properties' not in text:
+              text = 'import java.util.Properties\nimport java.io.FileInputStream\n\n' + text
+
+          marker = 'android {'
+          insert = '''val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+          }
+
+          '''
+          text = text.replace(marker, insert + marker, 1)
+
+          text = text.replace(
+              '    buildTypes {\n        release {',
+              '''    signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["keyPassword"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["storePassword"] as String
+                  }
+              }
+
+              buildTypes {
+                  release {''',
+              1,
+          )
+
+          text = text.replace(
+              '            signingConfig = signingConfigs.getByName("debug")',
+              '            signingConfig = signingConfigs.getByName("release")',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Build signed release AAB
+        working-directory: /tmp/finpilot_release
+        env:
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
+        run: |
+          test -n "$API_BASE_URL"
+          flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
+
+      - name: Upload signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: finpilot-release-aab
+          path: /tmp/finpilot_release/build/app/outputs/bundle/release/app-release.aab
