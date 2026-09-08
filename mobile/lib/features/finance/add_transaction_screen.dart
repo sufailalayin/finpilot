@@ -77,7 +77,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _save() async {
-    final amount = double.tryParse(_amount.text.trim());
+    final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
     if (_accountId == null || amount == null || amount <= 0) {
       setState(() => _error = 'Select an account and enter a valid amount.');
       return;
@@ -99,6 +99,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         note: _note.text,
       );
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _type == 'income'
+                ? 'Income saved successfully'
+                : 'Expense saved successfully',
+          ),
+        ),
+      );
       Navigator.of(context).pop(true);
     } catch (_) {
       setState(() => _error = 'Unable to save transaction.');
