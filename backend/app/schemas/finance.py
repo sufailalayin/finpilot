@@ -14,6 +14,22 @@ class AccountCreate(BaseModel):
     opening_balance: Decimal = Decimal("0.00")
 
 
+class AccountUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    account_type: AccountType | None = None
+    opening_balance: Decimal | None = None
+
+
+class AccountBalanceResponse(AccountResponse if False else BaseModel):
+    id: uuid.UUID
+    name: str
+    account_type: AccountType
+    currency: str
+    opening_balance: Decimal
+    current_balance: Decimal
+    created_at: datetime
+
+
 class AccountResponse(AccountCreate):
     id: uuid.UUID
     created_at: datetime
@@ -45,3 +61,26 @@ class TransactionResponse(TransactionCreate):
     id: uuid.UUID
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+class TransactionUpdate(BaseModel):
+    account_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
+    transaction_type: TransactionType | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    occurred_on: date | None = None
+    merchant: str | None = Field(default=None, max_length=120)
+    note: str | None = None
+
+
+class TransferCreate(BaseModel):
+    from_account_id: uuid.UUID
+    to_account_id: uuid.UUID
+    amount: Decimal = Field(gt=0)
+    occurred_on: date
+    note: str | None = None
+
+
+class TransferResponse(BaseModel):
+    outgoing: TransactionResponse
+    incoming: TransactionResponse
