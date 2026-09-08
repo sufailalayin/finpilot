@@ -26,6 +26,13 @@ class _AIScreenState extends State<AIScreen> {
 
   bool _loading = false;
 
+  final _prompts = const [
+    'Where am I spending the most this month?',
+    'How can I improve my savings rate?',
+    'Am I overspending compared with my income?',
+    'Give me a simple plan for the rest of this month.',
+  ];
+
   Future<void> _send() async {
     final question = _question.text.trim();
     if (question.isEmpty || _loading) return;
@@ -65,27 +72,81 @@ class _AIScreenState extends State<AIScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
+            child: ListView(
               padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                final isUser = message['role'] == 'user';
-                return Align(
-                  alignment: isUser
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 320),
-                        child: Text(message['text'] ?? ''),
-                      ),
-                    ),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(22),
                   ),
-                );
-              },
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.auto_awesome, size: 28),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'FinPilot AI',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                            SizedBox(height: 5),
+                            Text(
+                              'Ask questions based on your recorded income, expenses, budgets and goals.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _prompts
+                      .map(
+                        (prompt) => ActionChip(
+                          label: Text(prompt),
+                          onPressed: _loading
+                              ? null
+                              : () {
+                                  _question.text = prompt;
+                                  _send();
+                                },
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 18),
+                ..._messages.map((message) {
+                  final isUser = message['role'] == 'user';
+                  return Align(
+                    alignment: isUser
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      constraints: const BoxConstraints(maxWidth: 330),
+                      decoration: BoxDecoration(
+                        color: isUser
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(message['text'] ?? ''),
+                    ),
+                  );
+                }),
+              ],
             ),
           ),
           SafeArea(
