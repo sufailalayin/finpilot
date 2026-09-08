@@ -81,6 +81,7 @@ class Entitlement(Base):
     paid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     provider_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_product_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
