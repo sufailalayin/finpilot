@@ -6,6 +6,7 @@ import '../assets/assets_screen.dart';
 import '../automation/automation_screen.dart';
 import '../liabilities/liabilities_screen.dart';
 import 'planning_service.dart';
+import 'budget_dashboard_screen.dart';
 
 class PlanningScreen extends StatefulWidget {
   const PlanningScreen({super.key, required this.api});
