@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
+import '../finance/add_account_screen.dart';
+import '../finance/add_transaction_screen.dart';
 import 'dashboard_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -37,6 +39,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _future;
   }
 
+  Future<void> _openAccount() async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AddAccountScreen(api: widget.api)),
+    );
+    if (created == true) await _refresh();
+  }
+
+  Future<void> _openTransaction(String type) async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddTransactionScreen(
+          api: widget.api,
+          initialType: type,
+        ),
+      ),
+    );
+    if (created == true) await _refresh();
+  }
+
   Future<void> _logout() async {
     await _auth.logout();
     if (!mounted) return;
@@ -57,7 +78,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text(label),
               const SizedBox(height: 8),
               Text(
-                _money.format(value),
+                label == 'Transactions'
+                    ? value.toInt().toString()
+                    : _money.format(value),
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
@@ -82,6 +105,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'Sign out',
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openTransaction('expense'),
+        icon: const Icon(Icons.add),
+        label: const Text('Add transaction'),
       ),
       body: FutureBuilder<DashboardData>(
         future: _future,
@@ -127,9 +155,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   children: [
                     _metric('Net', data.monthNet),
-                    _metric(
-                      'Transactions',
-                      data.transactionCount.toDouble(),
+                    _metric('Transactions', data.transactionCount.toDouble()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _openAccount,
+                        icon: const Icon(Icons.account_balance_wallet_outlined),
+                        label: const Text('Add account'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openTransaction('income'),
+                        icon: const Icon(Icons.south_west),
+                        label: const Text('Add income'),
+                      ),
                     ),
                   ],
                 ),
@@ -140,10 +185,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 8),
                 if (data.accounts.isEmpty)
-                  const Card(
+                  Card(
                     child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No accounts yet.'),
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('No accounts yet.'),
+                          const SizedBox(height: 12),
+                          FilledButton.tonal(
+                            onPressed: _openAccount,
+                            child: const Text('Create your first account'),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 else
