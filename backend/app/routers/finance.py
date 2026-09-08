@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.finance import Category, FinanceAccount, Transaction
+from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.user import User
 from app.schemas.finance import AccountCreate, AccountResponse, CategoryCreate, CategoryResponse, TransactionCreate, TransactionResponse
 
@@ -133,7 +133,7 @@ async def bootstrap_categories(
             category = Category(
                 user_id=user.id,
                 name=name,
-                transaction_type=tx_type,
+                transaction_type=TransactionType(tx_type),
             )
             db.add(category)
             created.append(category)
