@@ -78,6 +78,41 @@ jobs:
           class MainActivity: FlutterFragmentActivity()
           EOF
           sed -i '/<manifest/a\    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' /tmp/finpilot_mobile/android/app/src/main/AndroidManifest.xml
+      - name: Apply FinPilot release branding
+        run: |
+          mkdir -p /tmp/finpilot_mobile/android/app/src/main/res/drawable
+          mkdir -p /tmp/finpilot_mobile/android/app/src/main/res/drawable-v21
+          cat > /tmp/finpilot_mobile/android/app/src/main/res/drawable/finpilot_mark.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#185A4A"
+                  android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8Z"/>
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M31,30H77V41H43V50H70V61H43V79H31Z"/>
+              <path
+                  android:fillColor="#A9E4D5"
+                  android:pathData="M62,50H77V61H62Z"/>
+          </vector>
+          EOF
+          cat > /tmp/finpilot_mobile/android/app/src/main/res/drawable/launch_background.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="#F7F9F8" />
+              <item
+                  android:width="120dp"
+                  android:height="120dp"
+                  android:gravity="center"
+                  android:drawable="@drawable/finpilot_mark" />
+          </layer-list>
+          EOF
+          cp /tmp/finpilot_mobile/android/app/src/main/res/drawable/launch_background.xml /tmp/finpilot_mobile/android/app/src/main/res/drawable-v21/launch_background.xml
+          sed -i 's/android:label="finpilot"/android:label="FinPilot"/' /tmp/finpilot_mobile/android/app/src/main/AndroidManifest.xml
+          sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@drawable/finpilot_mark"#' /tmp/finpilot_mobile/android/app/src/main/AndroidManifest.xml
       - name: Install Flutter dependencies
         working-directory: /tmp/finpilot_mobile
         run: flutter pub get
