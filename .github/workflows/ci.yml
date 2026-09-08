@@ -65,6 +65,7 @@ jobs:
         run: |
           flutter create --platforms=android --org com.hastronventures --project-name finpilot /tmp/finpilot_mobile
           rm -rf /tmp/finpilot_mobile/lib
+          rm -rf /tmp/finpilot_mobile/test
           cp -R mobile/lib /tmp/finpilot_mobile/lib
           cp mobile/pubspec.yaml /tmp/finpilot_mobile/pubspec.yaml
       - name: Install Flutter dependencies
