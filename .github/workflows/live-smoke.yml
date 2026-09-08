@@ -1,0 +1,27 @@
+name: FinPilot Live Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Live API base URL including /api/v1"
+        required: true
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "httpx>=0.27,<1"
+      - name: Run live backend smoke test
+        env:
+          FINPILOT_SMOKE_EMAIL: ${{ secrets.FINPILOT_SMOKE_EMAIL }}
+          FINPILOT_SMOKE_PASSWORD: ${{ secrets.FINPILOT_SMOKE_PASSWORD }}
+        run: |
+          test -n "$FINPILOT_SMOKE_EMAIL"
+          test -n "$FINPILOT_SMOKE_PASSWORD"
+          python scripts/live_smoke.py             --base-url "${{ inputs.api_base_url }}"             --email "$FINPILOT_SMOKE_EMAIL"             --password "$FINPILOT_SMOKE_PASSWORD"
