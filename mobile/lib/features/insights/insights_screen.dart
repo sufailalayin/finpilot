@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import 'analytics_service.dart';
+import 'reports_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key, required this.api});
@@ -135,6 +136,16 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReportsScreen(api: widget.api),
+                    ),
+                  ),
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  label: const Text('View full reports'),
                 ),
                 const SizedBox(height: 24),
                 Text(
