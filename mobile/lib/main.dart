@@ -32,8 +32,18 @@ class _FinPilotAppState extends State<FinPilotApp> {
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF185A4A),
+        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+        ),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+        ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
+          filled: true,
         ),
       ),
       home: FutureBuilder<bool>(
