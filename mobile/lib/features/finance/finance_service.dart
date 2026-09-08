@@ -15,6 +15,11 @@ class FinanceService {
     return (response.data as List<dynamic>);
   }
 
+  Future<List<dynamic>> bootstrapCategories() async {
+    final response = await _api.dio.post('/finance/categories/bootstrap');
+    return response.data as List<dynamic>;
+  }
+
   Future<List<dynamic>> listTransactions() async {
     final response = await _api.dio.get('/finance/transactions');
     return (response.data as List<dynamic>);
