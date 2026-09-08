@@ -207,6 +207,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
               final accountAssets =
                   double.tryParse(worth['account_assets']?.toString() ?? '0') ??
                       0;
+              final investmentAssets = double.tryParse(
+                    worth['investment_assets']?.toString() ?? '0',
+                  ) ??
+                  0;
               final liabilities =
                   double.tryParse(worth['liabilities']?.toString() ?? '0') ?? 0;
 
@@ -244,6 +248,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           Text(
                             'Accounts ' +
                                 _money.format(accountAssets) +
+                                ' • Investments ' +
+                                _money.format(investmentAssets) +
                                 ' • Debt ' +
                                 _money.format(liabilities),
                           ),
