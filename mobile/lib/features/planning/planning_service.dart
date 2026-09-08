@@ -5,6 +5,11 @@ class PlanningService {
 
   final ApiClient _api;
 
+  Future<Map<String, dynamic>> budgetDashboard() async {
+    final response = await _api.dio.get('/planning/budgets/dashboard');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<List<dynamic>> listBudgets() async {
     final response = await _api.dio.get('/planning/budgets');
     return response.data as List<dynamic>;
@@ -38,6 +43,8 @@ class PlanningService {
     required DateTime periodStart,
     required DateTime periodEnd,
     String? categoryId,
+    bool rolloverEnabled = false,
+    double alertThresholdPct = 80,
   }) async {
     await _api.dio.post(
       '/planning/budgets',
@@ -47,6 +54,8 @@ class PlanningService {
         'period_start': periodStart.toIso8601String().split('T').first,
         'period_end': periodEnd.toIso8601String().split('T').first,
         'category_id': categoryId,
+        'rollover_enabled': rolloverEnabled,
+        'alert_threshold_pct': alertThresholdPct,
       },
     );
   }
