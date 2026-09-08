@@ -6,6 +6,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Category, Transaction, TransactionType
+from app.models.liability import Liability
 from app.models.planning import Budget
 
 
@@ -321,6 +322,19 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
             )
             net_worth += account.opening_balance + (movement or Decimal("0.00"))
 
+        debt = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(Liability.outstanding_principal),
+                    Decimal("0.00"),
+                )
+            ).where(
+                Liability.user_id == user_id,
+                Liability.created_at <= end,
+            )
+        )
+        debt = debt or Decimal("0.00")
+
         trend.append(
             {
                 "month": start.strftime("%Y-%m"),
@@ -328,7 +342,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                 "expenses": expenses,
                 "net": net,
                 "savings_rate": round(savings_rate, 1),
-                "net_worth": net_worth,
+                "net_worth": net_worth - debt,
             }
         )
 
