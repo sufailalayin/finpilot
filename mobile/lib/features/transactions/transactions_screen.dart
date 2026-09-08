@@ -25,6 +25,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   );
 
   String _filter = 'all';
+  String _query = '';
 
   @override
   void initState() {
@@ -81,7 +82,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           }
 
           final all = snapshot.data ?? const [];
-          final items = _filter == 'all'
+          final filtered = _filter == 'all'
               ? all
               : all
                   .where(
@@ -89,12 +90,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         item['transaction_type']?.toString() == _filter,
                   )
                   .toList();
+          final items = filtered.where((item) {
+            if (_query.trim().isEmpty) return true;
+            final q = _query.trim().toLowerCase();
+            return (item['merchant']?.toString().toLowerCase().contains(q) ?? false) ||
+                (item['note']?.toString().toLowerCase().contains(q) ?? false) ||
+                item['amount'].toString().contains(q);
+          }).toList();
 
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               children: [
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search transactions',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+                const SizedBox(height: 14),
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'all', label: Text('All')),
@@ -196,13 +212,58 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               ],
                             ),
                           ),
-                          Text(
-                            (type == 'income' ? '+ ' : '- ') +
-                                _money.format(amount),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                (type == 'income' ? '+ ' : '- ') +
+                                    _money.format(amount),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: 'Transaction actions',
+                                onSelected: (action) async {
+                                  if (action == 'delete') {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Delete transaction?'),
+                                        content: const Text(
+                                          'This will permanently remove this transaction.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed == true) {
+                                      await _finance.deleteTransaction(
+                                        item['id'].toString(),
+                                      );
+                                      await _refresh();
+                                    }
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ],
                       ),
