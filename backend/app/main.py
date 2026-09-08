@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.routers.ai import router as ai_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.finance import router as finance_router
@@ -17,6 +18,7 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(finance_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(planning_router, prefix="/api/v1")
+app.include_router(ai_router, prefix="/api/v1")
 
 
 @app.get("/")
