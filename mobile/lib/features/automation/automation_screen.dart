@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../finance/finance_service.dart';
 import 'automation_service.dart';
+import 'smart_alerts_screen.dart';
 
 class AutomationScreen extends StatefulWidget {
   const AutomationScreen({super.key, required this.api});
@@ -40,6 +41,11 @@ class _AutomationScreenState extends State<AutomationScreen> {
     final name = TextEditingController();
     final amount = TextEditingController();
     var due = DateTime.now().add(const Duration(days: 7));
+    String billType = 'bill';
+    String frequency = 'once';
+    bool autoRenew = false;
+    double reminderDays = 3;
+    final provider = TextEditingController();
 
     final saved = await showDialog<bool>(
       context: context,
@@ -59,6 +65,60 @@ class _AutomationScreenState extends State<AutomationScreen> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Amount'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: billType,
+                decoration: const InputDecoration(labelText: 'Type'),
+                items: const [
+                  DropdownMenuItem(value: 'bill', child: Text('Bill')),
+                  DropdownMenuItem(value: 'subscription', child: Text('Subscription')),
+                  DropdownMenuItem(value: 'emi', child: Text('EMI')),
+                  DropdownMenuItem(value: 'insurance', child: Text('Insurance')),
+                  DropdownMenuItem(value: 'utility', child: Text('Utility')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setLocal(() => billType = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: provider,
+                decoration: const InputDecoration(labelText: 'Provider / company'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: frequency,
+                decoration: const InputDecoration(labelText: 'Frequency'),
+                items: const [
+                  DropdownMenuItem(value: 'once', child: Text('One time')),
+                  DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                  DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                  DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setLocal(() => frequency = value);
+                },
+              ),
+              if (billType == 'subscription') ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto-renew'),
+                  value: autoRenew,
+                  onChanged: (value) => setLocal(() => autoRenew = value),
+                ),
+              ],
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Remind before'),
+                subtitle: Text(reminderDays.round().toString() + ' day(s)'),
+              ),
+              Slider(
+                min: 0,
+                max: 14,
+                divisions: 14,
+                value: reminderDays,
+                onChanged: (value) => setLocal(() => reminderDays = value),
               ),
               const SizedBox(height: 12),
               ListTile(
@@ -95,6 +155,11 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   name: name.text,
                   amount: value,
                   dueOn: due,
+                  frequency: frequency,
+                  billType: billType,
+                  provider: provider.text,
+                  reminderDaysBefore: reminderDays.round(),
+                  autoRenew: autoRenew,
                 );
                 if (context.mounted) Navigator.pop(context, true);
               },
@@ -107,6 +172,7 @@ class _AutomationScreenState extends State<AutomationScreen> {
 
     name.dispose();
     amount.dispose();
+    provider.dispose();
     if (saved == true) await _refresh();
   }
 
@@ -316,6 +382,16 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SmartAlertsScreen(api: widget.api),
+                    ),
+                  ),
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Smart alerts'),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
