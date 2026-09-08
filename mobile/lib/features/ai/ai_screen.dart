@@ -27,11 +27,37 @@ class _AIScreenState extends State<AIScreen> {
   bool _loading = false;
 
   final _prompts = const [
-    'Where am I spending the most this month?',
-    'How can I improve my savings rate?',
-    'Am I overspending compared with my income?',
-    'Give me a simple plan for the rest of this month.',
+    'Can I afford a ₹25,000 purchase this month?',
+    'What is hurting my financial health score?',
+    'How should I reduce my EMI burden?',
+    'Which budget is most likely to overspend?',
+    'How much should I save monthly for my goals?',
+    'What should I focus on for the next 30 days?',
   ];
+
+  Future<void> _brief() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final answer = await _ai.brief();
+      if (!mounted) return;
+      setState(() {
+        _messages.add({
+          'role': 'assistant',
+          'text': 'Copilot Brief\n\n' + answer,
+        });
+      });
+    } on DioException catch (error) {
+      final detail = error.response?.data;
+      final message = detail is Map<String, dynamic> && detail['detail'] != null
+          ? detail['detail'].toString()
+          : 'FinPilot AI is unavailable right now.';
+      if (!mounted) return;
+      setState(() => _messages.add({'role': 'assistant', 'text': message}));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _send() async {
     final question = _question.text.trim();
@@ -99,12 +125,21 @@ class _AIScreenState extends State<AIScreen> {
                             ),
                             SizedBox(height: 5),
                             Text(
-                              'Ask questions based on your recorded income, expenses, budgets and goals.',
+                              'Ask across your balances, spending, budgets, goals, assets, loans, EMIs, bills and financial health.',
                             ),
                           ],
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _loading ? null : _brief,
+                    icon: const Icon(Icons.summarize_outlined),
+                    label: const Text('Generate Copilot Brief'),
                   ),
                 ),
                 const SizedBox(height: 16),
