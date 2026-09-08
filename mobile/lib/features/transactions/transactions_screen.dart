@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../finance/add_transaction_screen.dart';
 import '../finance/finance_service.dart';
+import 'edit_transaction_screen.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key, required this.api});
@@ -226,7 +227,23 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               PopupMenuButton<String>(
                                 tooltip: 'Transaction actions',
                                 onSelected: (action) async {
-                                  if (action == 'delete') {
+                                  if (action == 'edit') {
+                                    final updated =
+                                        await Navigator.of(context).push<bool>(
+                                      MaterialPageRoute(
+                                        builder: (_) => EditTransactionScreen(
+                                          api: widget.api,
+                                          transaction:
+                                              Map<String, dynamic>.from(
+                                            item as Map,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                    if (updated == true) {
+                                      await _refresh();
+                                    }
+                                  } else if (action == 'delete') {
                                     final confirmed = await showDialog<bool>(
                                       context: context,
                                       builder: (context) => AlertDialog(
@@ -257,6 +274,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                   }
                                 },
                                 itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit'),
+                                  ),
                                   PopupMenuItem(
                                     value: 'delete',
                                     child: Text('Delete'),
