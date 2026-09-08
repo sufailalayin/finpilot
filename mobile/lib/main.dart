@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/api_client.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/auth/auth_service.dart';
-import 'features/dashboard/dashboard_screen.dart';
+import 'features/navigation/app_shell.dart';
 
 void main() {
   runApp(const FinPilotApp());
@@ -28,6 +28,9 @@ class _FinPilotAppState extends State<FinPilotApp> {
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF185A4A),
+        inputDecorationTheme: const InputDecorationTheme(
+          border: OutlineInputBorder(),
+        ),
       ),
       home: FutureBuilder<bool>(
         future: _session,
@@ -39,7 +42,7 @@ class _FinPilotAppState extends State<FinPilotApp> {
           }
 
           if (snapshot.data == true) {
-            return DashboardScreen(api: _api);
+            return AppShell(api: _api);
           }
 
           return AuthScreen(api: _api);
