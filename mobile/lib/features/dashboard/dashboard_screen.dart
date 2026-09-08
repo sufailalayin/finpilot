@@ -7,6 +7,7 @@ import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
 import '../finance/add_account_screen.dart';
 import '../finance/add_transaction_screen.dart';
+import '../insights/insights_screen.dart';
 import '../planning/planning_screen.dart';
 import '../subscription/paywall_screen.dart';
 import 'dashboard_service.dart';
@@ -323,11 +324,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 10),
                     _quickAction(
-                      label: 'AI',
-                      icon: Icons.auto_awesome_outlined,
+                      label: 'Insights',
+                      icon: Icons.insights_outlined,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => AIScreen(api: widget.api),
+                          builder: (_) => InsightsScreen(api: widget.api),
                         ),
                       ),
                     ),
