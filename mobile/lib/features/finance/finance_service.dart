@@ -20,6 +20,33 @@ class FinanceService {
     return (response.data as List<dynamic>);
   }
 
+  Future<void> createCategory({
+    required String name,
+    required String transactionType,
+  }) async {
+    await _api.dio.post(
+      '/finance/categories',
+      data: {
+        'name': name.trim(),
+        'transaction_type': transactionType,
+      },
+    );
+  }
+
+  Future<void> updateCategory({
+    required String categoryId,
+    required String name,
+  }) async {
+    await _api.dio.patch(
+      '/finance/categories/$categoryId',
+      data: {'name': name.trim()},
+    );
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    await _api.dio.delete('/finance/categories/$categoryId');
+  }
+
   Future<List<dynamic>> bootstrapCategories() async {
     final response = await _api.dio.post('/finance/categories/bootstrap');
     return response.data as List<dynamic>;
