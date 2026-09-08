@@ -4,6 +4,8 @@ import 'core/api_client.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/auth/auth_service.dart';
 import 'features/navigation/app_shell.dart';
+import 'features/security/app_lock_screen.dart';
+import 'features/security/app_security_service.dart';
 
 void main() {
   runApp(const FinPilotApp());
@@ -19,6 +21,8 @@ class FinPilotApp extends StatefulWidget {
 class _FinPilotAppState extends State<FinPilotApp> {
   late final ApiClient _api = ApiClient();
   late final Future<bool> _session = AuthService(_api).hasSession();
+  late final AppSecurityService _security = AppSecurityService();
+  bool _unlocked = false;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +46,23 @@ class _FinPilotAppState extends State<FinPilotApp> {
           }
 
           if (snapshot.data == true) {
-            return AppShell(api: _api);
+            return FutureBuilder<bool>(
+              future: _security.isLockEnabled(),
+              builder: (context, lockSnapshot) {
+                if (lockSnapshot.connectionState != ConnectionState.done) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final lockEnabled = lockSnapshot.data == true;
+                if (lockEnabled && !_unlocked) {
+                  return AppLockScreen(
+                    onUnlocked: () => setState(() => _unlocked = true),
+                  );
+                }
+                return AppShell(api: _api);
+              },
+            );
           }
 
           return AuthScreen(api: _api);
