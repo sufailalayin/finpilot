@@ -18,6 +18,7 @@ class AccountsScreen extends StatefulWidget {
 class _AccountsScreenState extends State<AccountsScreen> {
   late final FinanceService _finance = FinanceService(widget.api);
   late Future<List<dynamic>> _future;
+  late Future<Map<String, dynamic>> _netWorthFuture;
 
   final _money = NumberFormat.currency(
     locale: 'en_IN',
@@ -29,11 +30,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
   void initState() {
     super.initState();
     _future = _finance.listAccountBalances();
+    _netWorthFuture = _finance.netWorthSummary();
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _finance.listAccountBalances());
-    await _future;
+    setState(() {
+      _future = _finance.listAccountBalances();
+      _netWorthFuture = _finance.netWorthSummary();
+    });
+    await Future.wait([_future, _netWorthFuture]);
   }
 
   Future<void> _addAccount() async {
@@ -188,52 +193,63 @@ class _AccountsScreenState extends State<AccountsScreen> {
           }
 
           final accounts = snapshot.data ?? const [];
-          final netWorth = accounts.fold<double>(
-            0,
-            (sum, item) =>
-                sum +
-                (double.tryParse(item['current_balance'].toString()) ?? 0),
-          );
 
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'NET WORTH',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1,
-                          fontSize: 12,
-                        ),
+          return FutureBuilder<Map<String, dynamic>>(
+            future: _netWorthFuture,
+            builder: (context, worthSnapshot) {
+              if (worthSnapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final worth = worthSnapshot.data ?? const <String, dynamic>{};
+              final netWorth =
+                  double.tryParse(worth['net_worth']?.toString() ?? '0') ?? 0;
+              final accountAssets =
+                  double.tryParse(worth['account_assets']?.toString() ?? '0') ??
+                      0;
+              final liabilities =
+                  double.tryParse(worth['liabilities']?.toString() ?? '0') ?? 0;
+
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _money.format(netWorth),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 32,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'NET WORTH',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _money.format(netWorth),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 32,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Accounts ' +
+                                _money.format(accountAssets) +
+                                ' • Debt ' +
+                                _money.format(liabilities),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        accounts.length.toString() +
-                            ' financial account' +
-                            (accounts.length == 1 ? '' : 's'),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -334,8 +350,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       ),
                     );
                   }),
-              ],
-            ),
+                  ],
+                ),
+              );
+            },
           );
         },
       ),
