@@ -23,7 +23,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   Future<void> _save() async {
     final name = _name.text.trim();
-    final opening = double.tryParse(_openingBalance.text.trim());
+    final opening = double.tryParse(_openingBalance.text.trim().replaceAll(',', ''));
 
     if (name.isEmpty || opening == null) {
       setState(() => _error = 'Enter a valid account name and balance.');
@@ -42,6 +42,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         openingBalance: opening,
       );
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account saved successfully')),
+      );
       Navigator.of(context).pop(true);
     } catch (_) {
       setState(() => _error = 'Unable to create account.');
