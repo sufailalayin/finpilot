@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.entitlements import require_pro_user
 from app.models.asset import Asset
 from app.models.user import User
 from app.schemas.asset import (
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 @router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(
     payload: AssetCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssetResponse:
     item = Asset(user_id=user.id, **payload.model_dump())
@@ -35,7 +36,7 @@ async def create_asset(
 
 @router.get("", response_model=list[AssetResponse])
 async def list_assets(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[AssetResponse]:
     result = await db.execute(
@@ -50,7 +51,7 @@ async def list_assets(
 async def update_asset(
     asset_id: uuid.UUID,
     payload: AssetUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssetResponse:
     item = await db.scalar(
@@ -70,7 +71,7 @@ async def update_asset(
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_asset(
     asset_id: uuid.UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     item = await db.scalar(
@@ -84,7 +85,7 @@ async def delete_asset(
 
 @router.get("/overview/summary", response_model=AssetOverview)
 async def asset_overview(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssetOverview:
     assets = list(
