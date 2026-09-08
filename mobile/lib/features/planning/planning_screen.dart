@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../assets/assets_screen.dart';
 import '../automation/automation_screen.dart';
 import '../liabilities/liabilities_screen.dart';
+import '../subscription/pro_feature_gate.dart';
 import 'planning_service.dart';
 import 'budget_dashboard_screen.dart';
 import 'goal_planner_screen.dart';
@@ -186,7 +187,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
           FilledButton.tonalIcon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => AutomationScreen(api: widget.api),
+                builder: (_) => ProFeatureGate(api: widget.api, featureCode: 'smart_alerts', child: AutomationScreen(api: widget.api)),
               ),
             ),
             icon: const Icon(Icons.auto_mode_outlined),
@@ -196,7 +197,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
           FilledButton.tonalIcon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => LiabilitiesScreen(api: widget.api),
+                builder: (_) => ProFeatureGate(api: widget.api, featureCode: 'assets_liabilities', child: LiabilitiesScreen(api: widget.api)),
               ),
             ),
             icon: const Icon(Icons.account_balance_outlined),
@@ -206,7 +207,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
           FilledButton.tonalIcon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => AssetsScreen(api: widget.api),
+                builder: (_) => ProFeatureGate(api: widget.api, featureCode: 'assets_liabilities', child: AssetsScreen(api: widget.api)),
               ),
             ),
             icon: const Icon(Icons.savings_outlined),
@@ -221,7 +222,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
               TextButton(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => BudgetDashboardScreen(api: widget.api),
+                    builder: (_) => ProFeatureGate(api: widget.api, featureCode: 'smart_budgeting', child: BudgetDashboardScreen(api: widget.api)),
                   ),
                 ),
                 child: const Text('View budget control'),
@@ -255,7 +256,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
               TextButton(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => GoalPlannerScreen(api: widget.api),
+                    builder: (_) => ProFeatureGate(api: widget.api, featureCode: 'smart_budgeting', child: GoalPlannerScreen(api: widget.api)),
                   ),
                 ),
                 child: const Text('Open goal planner'),
