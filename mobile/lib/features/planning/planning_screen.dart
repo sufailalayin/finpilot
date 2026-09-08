@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../automation/automation_screen.dart';
 import 'planning_service.dart';
 
 class PlanningScreen extends StatefulWidget {
@@ -132,6 +133,16 @@ class _PlanningScreenState extends State<PlanningScreen> {
               const SizedBox(width: 12),
               Expanded(child: FilledButton.tonalIcon(onPressed: _addGoal, icon: const Icon(Icons.flag_outlined), label: const Text('Add goal'))),
             ],
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AutomationScreen(api: widget.api),
+              ),
+            ),
+            icon: const Icon(Icons.auto_mode_outlined),
+            label: const Text('Bills, recurring & cash-flow forecast'),
           ),
           const SizedBox(height: 24),
           Text('Budgets', style: Theme.of(context).textTheme.titleLarge),
