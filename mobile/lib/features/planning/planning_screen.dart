@@ -7,6 +7,7 @@ import '../automation/automation_screen.dart';
 import '../liabilities/liabilities_screen.dart';
 import 'planning_service.dart';
 import 'budget_dashboard_screen.dart';
+import 'goal_planner_screen.dart';
 
 class PlanningScreen extends StatefulWidget {
   const PlanningScreen({super.key, required this.api});
@@ -39,10 +40,13 @@ class _PlanningScreenState extends State<PlanningScreen> {
     final name = TextEditingController();
     final target = TextEditingController();
     final current = TextEditingController(text: '0');
+    String goalType = 'emergency_fund';
+    DateTime? targetDate;
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
         title: const Text('New savings goal'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -50,6 +54,44 @@ class _PlanningScreenState extends State<PlanningScreen> {
             TextField(controller: name, decoration: const InputDecoration(labelText: 'Goal name')),
             TextField(controller: target, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target amount')),
             TextField(controller: current, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Already saved')),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: goalType,
+              decoration: const InputDecoration(labelText: 'Goal type'),
+              items: const [
+                DropdownMenuItem(value: 'emergency_fund', child: Text('Emergency fund')),
+                DropdownMenuItem(value: 'travel', child: Text('Travel')),
+                DropdownMenuItem(value: 'car', child: Text('Car')),
+                DropdownMenuItem(value: 'home', child: Text('Home')),
+                DropdownMenuItem(value: 'education', child: Text('Education')),
+                DropdownMenuItem(value: 'wedding', child: Text('Wedding')),
+                DropdownMenuItem(value: 'retirement', child: Text('Retirement')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (value) {
+                if (value != null) setLocal(() => goalType = value);
+              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Target date'),
+              subtitle: Text(
+                targetDate == null
+                    ? 'Optional'
+                    : DateFormat('dd MMM yyyy').format(targetDate!),
+              ),
+              trailing: const Icon(Icons.calendar_today_outlined),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 7300)),
+                  initialDate: targetDate ?? DateTime.now().add(const Duration(days: 365)),
+                );
+                if (picked != null) setLocal(() => targetDate = picked);
+              },
+            ),
           ],
         ),
         actions: [
@@ -63,12 +105,15 @@ class _PlanningScreenState extends State<PlanningScreen> {
                 name: name.text,
                 targetAmount: targetAmount,
                 currentAmount: currentAmount,
+                goalType: goalType,
+                targetDate: targetDate,
               );
               if (context.mounted) Navigator.pop(context, true);
             },
             child: const Text('Save'),
           ),
         ],
+      ),
       ),
     );
 
@@ -168,7 +213,21 @@ class _PlanningScreenState extends State<PlanningScreen> {
             label: const Text('Assets & investments'),
           ),
           const SizedBox(height: 24),
-          Text('Budgets', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Budgets', style: Theme.of(context).textTheme.titleLarge),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BudgetDashboardScreen(api: widget.api),
+                  ),
+                ),
+                child: const Text('View budget control'),
+              ),
+            ],
+          ),
           FutureBuilder<List<dynamic>>(
             future: _budgets,
             builder: (context, snapshot) {
@@ -188,7 +247,21 @@ class _PlanningScreenState extends State<PlanningScreen> {
             },
           ),
           const SizedBox(height: 24),
-          Text('Savings goals', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Savings goals', style: Theme.of(context).textTheme.titleLarge),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => GoalPlannerScreen(api: widget.api),
+                  ),
+                ),
+                child: const Text('Open goal planner'),
+              ),
+            ],
+          ),
           FutureBuilder<List<dynamic>>(
             future: _goals,
             builder: (context, snapshot) {
