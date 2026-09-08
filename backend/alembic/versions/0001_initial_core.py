@@ -22,13 +22,6 @@ def upgrade() -> None:
     category_transaction_type = sa.Enum("INCOME", "EXPENSE", "TRANSFER", name="category_transaction_type")
     transaction_type = sa.Enum("INCOME", "EXPENSE", "TRANSFER", name="transaction_type")
 
-    user_status.create(op.get_bind(), checkfirst=True)
-    plan_code.create(op.get_bind(), checkfirst=True)
-    entitlement_status.create(op.get_bind(), checkfirst=True)
-    account_type.create(op.get_bind(), checkfirst=True)
-    category_transaction_type.create(op.get_bind(), checkfirst=True)
-    transaction_type.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
