@@ -6,6 +6,7 @@ import '../categories/categories_screen.dart';
 import '../auth/auth_service.dart';
 import '../subscription/paywall_screen.dart';
 import '../subscription/subscription_service.dart';
+import '../security/security_privacy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.api});
@@ -151,10 +152,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           const SizedBox(height: 18),
-          const ListTile(
-            leading: Icon(Icons.shield_outlined),
-            title: Text('Security'),
-            subtitle: Text('Secure token-based sign in'),
+          ListTile(
+            leading: const Icon(Icons.shield_outlined),
+            title: const Text('Security & Privacy'),
+            subtitle: const Text(
+              'App lock, sessions, export and account controls',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => SecurityPrivacyScreen(api: widget.api),
+              ),
+            ),
           ),
           const ListTile(
             leading: Icon(Icons.currency_rupee),
