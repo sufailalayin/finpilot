@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
-import '../dashboard/dashboard_screen.dart';
+import '../navigation/app_shell.dart';
 import 'auth_service.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -47,7 +47,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => DashboardScreen(api: widget.api),
+          builder: (_) => AppShell(api: widget.api),
         ),
       );
     } on DioException catch (error) {
