@@ -41,6 +41,10 @@ class CategoryCreate(BaseModel):
     transaction_type: TransactionType
 
 
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+
+
 class CategoryResponse(CategoryCreate):
     id: uuid.UUID
     created_at: datetime
