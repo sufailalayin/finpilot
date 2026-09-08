@@ -3,13 +3,15 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.automation import BillReminder, RecurringRule
-from app.models.finance import FinanceAccount
+from app.models.finance import FinanceAccount, Transaction, TransactionType
+from app.models.liability import Liability
+from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
 from app.schemas.automation import (
     AutomationOverview,
@@ -242,6 +244,237 @@ async def smart_alerts(
                     source_id=bill.id,
                 )
             )
+
+    liabilities = list(
+        (
+            await db.execute(
+                select(Liability).where(
+                    Liability.user_id == user.id,
+                    Liability.next_due_on.is_not(None),
+                    Liability.outstanding_principal > 0,
+                )
+            )
+        ).scalars().all()
+    )
+    for liability in liabilities:
+        if liability.next_due_on is None:
+            continue
+        days = (liability.next_due_on - today).days
+        if 0 <= days <= 5:
+            alerts.append(
+                SmartAlert(
+                    alert_type="emi_due",
+                    severity="warning" if days > 0 else "critical",
+                    title=liability.name + (" EMI due today" if days == 0 else " EMI due soon"),
+                    message=(
+                        "EMI of ₹" + format(liability.emi_amount, ",.0f")
+                        + (" is due today." if days == 0 else " is due in " + str(days) + " day(s).")
+                    ),
+                    due_on=liability.next_due_on,
+                    amount=liability.emi_amount,
+                    source_id=liability.id,
+                )
+            )
+
+    budgets = list(
+        (
+            await db.execute(
+                select(Budget).where(
+                    Budget.user_id == user.id,
+                    Budget.period_start <= today,
+                    Budget.period_end >= today,
+                )
+            )
+        ).scalars().all()
+    )
+    for budget in budgets:
+        filters = [
+            Transaction.user_id == user.id,
+            Transaction.transaction_type == TransactionType.EXPENSE,
+            Transaction.occurred_on >= budget.period_start,
+            Transaction.occurred_on <= today,
+        ]
+        if budget.category_id is not None:
+            filters.append(Transaction.category_id == budget.category_id)
+        spent = await db.scalar(
+            select(func.coalesce(func.sum(Transaction.amount), Decimal("0.00"))).where(*filters)
+        )
+        spent = spent or Decimal("0.00")
+        usage = float(spent / budget.amount * 100) if budget.amount > 0 else 0.0
+        total_days = max((budget.period_end - budget.period_start).days + 1, 1)
+        elapsed = max((today - budget.period_start).days + 1, 1)
+        projected = spent / Decimal(elapsed) * Decimal(total_days)
+
+        if spent > budget.amount:
+            alerts.append(
+                SmartAlert(
+                    alert_type="budget_over",
+                    severity="critical",
+                    title=budget.name + " is over budget",
+                    message="Spent ₹" + format(spent, ",.0f") + " against ₹" + format(budget.amount, ",.0f") + ".",
+                    amount=spent,
+                    source_id=budget.id,
+                )
+            )
+        elif usage >= float(budget.alert_threshold_pct):
+            alerts.append(
+                SmartAlert(
+                    alert_type="budget_warning",
+                    severity="warning",
+                    title=budget.name + " is near its limit",
+                    message=f"{usage:.0f}% of the budget has been used.",
+                    amount=spent,
+                    source_id=budget.id,
+                )
+            )
+        elif projected > budget.amount:
+            alerts.append(
+                SmartAlert(
+                    alert_type="budget_forecast",
+                    severity="warning",
+                    title=budget.name + " may exceed its limit",
+                    message="Projected spend is ₹" + format(projected, ",.0f") + ".",
+                    amount=projected,
+                    source_id=budget.id,
+                )
+            )
+
+    goals = list(
+        (
+            await db.execute(
+                select(SavingsGoal).where(
+                    SavingsGoal.user_id == user.id,
+                    SavingsGoal.target_date.is_not(None),
+                    SavingsGoal.current_amount < SavingsGoal.target_amount,
+                )
+            )
+        ).scalars().all()
+    )
+    for goal in goals:
+        if goal.target_date is None:
+            continue
+        days = (goal.target_date - today).days
+        progress = float(goal.current_amount / goal.target_amount * 100) if goal.target_amount > 0 else 0.0
+        if days < 0:
+            alerts.append(
+                SmartAlert(
+                    alert_type="goal_overdue",
+                    severity="warning",
+                    title=goal.name + " target date has passed",
+                    message=f"Goal is {progress:.0f}% complete.",
+                    due_on=goal.target_date,
+                    source_id=goal.id,
+                )
+            )
+        elif days <= 60 and progress < 75:
+            alerts.append(
+                SmartAlert(
+                    alert_type="goal_risk",
+                    severity="info",
+                    title=goal.name + " needs attention",
+                    message=f"{progress:.0f}% complete with {days} day(s) remaining.",
+                    due_on=goal.target_date,
+                    source_id=goal.id,
+                )
+            )
+
+    month_start = today.replace(day=1)
+    month_expense = await db.scalar(
+        select(func.coalesce(func.sum(Transaction.amount), Decimal("0.00"))).where(
+            Transaction.user_id == user.id,
+            Transaction.transaction_type == TransactionType.EXPENSE,
+            Transaction.occurred_on >= month_start,
+            Transaction.occurred_on <= today,
+        )
+    )
+    month_expense = month_expense or Decimal("0.00")
+    elapsed_days = max((today - month_start).days + 1, 1)
+    avg_daily_expense = month_expense / Decimal(elapsed_days) if month_expense > 0 else Decimal("0.00")
+
+    accounts = list(
+        (
+            await db.execute(
+                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+            )
+        ).scalars().all()
+    )
+    total_liquid = Decimal("0.00")
+    for account in accounts:
+        movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                            (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(
+                Transaction.user_id == user.id,
+                Transaction.account_id == account.id,
+            )
+        )
+        total_liquid += account.opening_balance + (movement or Decimal("0.00"))
+
+    if avg_daily_expense > 0:
+        runway_days = float(total_liquid / avg_daily_expense)
+        if runway_days < 7:
+            alerts.append(
+                SmartAlert(
+                    alert_type="low_cash_runway",
+                    severity="critical" if runway_days < 3 else "warning",
+                    title="Low cash runway",
+                    message=f"Recorded liquid balances cover about {runway_days:.1f} day(s) of current spending.",
+                    amount=total_liquid,
+                )
+            )
+
+    average_transaction = await db.scalar(
+        select(func.avg(Transaction.amount)).where(
+            Transaction.user_id == user.id,
+            Transaction.transaction_type == TransactionType.EXPENSE,
+            Transaction.occurred_on >= month_start,
+            Transaction.occurred_on <= today,
+        )
+    )
+    if average_transaction is not None and average_transaction > 0:
+        recent_large = list(
+            (
+                await db.execute(
+                    select(Transaction)
+                    .where(
+                        Transaction.user_id == user.id,
+                        Transaction.transaction_type == TransactionType.EXPENSE,
+                        Transaction.occurred_on >= today - timedelta(days=3),
+                        Transaction.amount >= Decimal(str(average_transaction)) * Decimal("2.5"),
+                    )
+                    .order_by(Transaction.amount.desc())
+                    .limit(3)
+                )
+            ).scalars().all()
+        )
+        for transaction in recent_large:
+            alerts.append(
+                SmartAlert(
+                    alert_type="large_expense",
+                    severity="info",
+                    title="Large expense detected",
+                    message=(transaction.merchant or "Expense") + " was significantly above your recent average.",
+                    due_on=transaction.occurred_on,
+                    amount=transaction.amount,
+                    source_id=transaction.id,
+                )
+            )
+
+    alerts.sort(
+        key=lambda item: (
+            0 if item.severity == "critical" else 1 if item.severity == "warning" else 2,
+            item.due_on or horizon,
+        )
+    )
 
     critical = sum(1 for alert in alerts if alert.severity == "critical")
     warning = sum(1 for alert in alerts if alert.severity == "warning")
