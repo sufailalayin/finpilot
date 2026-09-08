@@ -23,6 +23,7 @@ class BudgetResponse(BudgetCreate):
 
 class SavingsGoalCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    goal_type: str = Field(default="other", min_length=1, max_length=40)
     target_amount: Decimal = Field(gt=0)
     current_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     target_date: date | None = None
@@ -61,3 +62,24 @@ class BudgetDashboard(BaseModel):
     total_remaining: Decimal
     projected_total_spend: Decimal
     budgets: list[BudgetPerformance]
+
+
+class GoalPlan(BaseModel):
+    id: uuid.UUID
+    name: str
+    goal_type: str
+    target_amount: Decimal
+    current_amount: Decimal
+    remaining_amount: Decimal
+    progress_pct: float
+    target_date: date | None
+    months_remaining: int | None
+    required_monthly_contribution: Decimal | None
+    status: str
+
+
+class GoalDashboard(BaseModel):
+    total_target: Decimal
+    total_saved: Decimal
+    total_remaining: Decimal
+    goals: list[GoalPlan]
