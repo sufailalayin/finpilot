@@ -1,17 +1,21 @@
 import uuid
+from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.finance import Category
+from app.models.finance import Category, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
 from app.schemas.planning import (
     BudgetCreate,
     BudgetResponse,
+    BudgetDashboard,
+    BudgetPerformance,
     GoalContribution,
     SavingsGoalCreate,
     SavingsGoalResponse,
@@ -98,3 +102,81 @@ async def contribute_to_goal(
     await db.commit()
     await db.refresh(goal)
     return SavingsGoalResponse.model_validate(goal)
+
+
+@router.get("/budgets/dashboard", response_model=BudgetDashboard)
+async def budget_dashboard(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BudgetDashboard:
+    today = date.today()
+    budgets = list((await db.execute(
+        select(Budget).where(
+            Budget.user_id == user.id,
+            Budget.period_start <= today,
+            Budget.period_end >= today,
+        ).order_by(Budget.amount.desc())
+    )).scalars().all())
+
+    rows = []
+    total_budget = Decimal("0.00")
+    total_spent = Decimal("0.00")
+    projected_total = Decimal("0.00")
+
+    for budget in budgets:
+        filters = [
+            Transaction.user_id == user.id,
+            Transaction.transaction_type == TransactionType.EXPENSE,
+            Transaction.occurred_on >= budget.period_start,
+            Transaction.occurred_on <= min(today, budget.period_end),
+        ]
+        if budget.category_id is not None:
+            filters.append(Transaction.category_id == budget.category_id)
+
+        spent = await db.scalar(
+            select(func.coalesce(func.sum(Transaction.amount), Decimal("0.00"))).where(*filters)
+        )
+        spent = spent or Decimal("0.00")
+        total_days = max((budget.period_end - budget.period_start).days + 1, 1)
+        elapsed_days = max((min(today, budget.period_end) - budget.period_start).days + 1, 1)
+        projected = (spent / Decimal(elapsed_days)) * Decimal(total_days)
+        remaining = budget.amount - spent
+        overrun = max(Decimal("0.00"), projected - budget.amount)
+        usage = float(spent / budget.amount * 100) if budget.amount > 0 else 0.0
+
+        if spent > budget.amount:
+            state = "over"
+        elif usage >= float(budget.alert_threshold_pct):
+            state = "warning"
+        elif projected > budget.amount:
+            state = "forecast_over"
+        else:
+            state = "on_track"
+
+        rows.append(BudgetPerformance(
+            id=budget.id,
+            name=budget.name,
+            budget_amount=budget.amount,
+            spent=spent,
+            remaining=remaining,
+            usage_pct=round(usage, 1),
+            projected_spend=projected.quantize(Decimal("0.01")),
+            projected_overrun=overrun.quantize(Decimal("0.01")),
+            status=state,
+            rollover_enabled=budget.rollover_enabled,
+            alert_threshold_pct=budget.alert_threshold_pct,
+            period_start=budget.period_start,
+            period_end=budget.period_end,
+            category_id=budget.category_id,
+        ))
+        total_budget += budget.amount
+        total_spent += spent
+        projected_total += projected
+
+    return BudgetDashboard(
+        total_budget=total_budget,
+        total_spent=total_spent,
+        total_remaining=total_budget - total_spent,
+        projected_total_spend=projected_total.quantize(Decimal("0.01")),
+        budgets=rows,
+    )
