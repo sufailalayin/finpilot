@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.entitlements import require_pro_user
 from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
@@ -125,7 +126,7 @@ def _occurrences_within_30d(rule: RecurringRule, today: date) -> int:
 
 @router.get("/overview", response_model=AutomationOverview)
 async def overview(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AutomationOverview:
     today = date.today()
@@ -181,7 +182,7 @@ async def overview(
 
 @router.get("/alerts", response_model=AlertOverview)
 async def smart_alerts(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AlertOverview:
     today = date.today()
