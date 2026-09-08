@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
+import '../ai/ai_screen.dart';
 import '../finance/add_account_screen.dart';
 import '../finance/add_transaction_screen.dart';
 import '../planning/planning_screen.dart';
@@ -100,6 +101,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('FinPilot'),
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => AIScreen(api: widget.api),
+                ),
+              );
+            },
+            icon: const Icon(Icons.auto_awesome_outlined),
+            tooltip: 'FinPilot AI',
+          ),
           IconButton(
             onPressed: () {
               Navigator.of(context).push(
