@@ -89,7 +89,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
 
     try {
-      await _finance.createTransaction(
+      final saved = await _finance.createTransaction(
         accountId: _accountId!,
         categoryId: _categoryId,
         transactionType: _type,
@@ -99,16 +99,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         note: _note.text,
       );
       if (!mounted) return;
+      final savedAmount = saved['amount']?.toString() ?? _amount.text.trim();
+      Navigator.of(context).pop(true);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _type == 'income'
-                ? 'Income saved successfully'
-                : 'Expense saved successfully',
+            (_type == 'income' ? 'Income saved: ₹' : 'Expense saved: ₹') +
+                savedAmount,
           ),
         ),
       );
-      Navigator.of(context).pop(true);
     } catch (_) {
       setState(() => _error = 'Unable to save transaction.');
     } finally {
