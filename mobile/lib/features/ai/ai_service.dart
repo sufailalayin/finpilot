@@ -5,6 +5,11 @@ class AIService {
 
   final ApiClient _api;
 
+  Future<String> brief() async {
+    final response = await _api.dio.post('/ai/brief');
+    return response.data['answer'].toString();
+  }
+
   Future<String> ask(String question) async {
     final response = await _api.dio.post(
       '/ai/ask',
