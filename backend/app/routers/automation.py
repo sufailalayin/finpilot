@@ -13,6 +13,8 @@ from app.models.finance import FinanceAccount
 from app.models.user import User
 from app.schemas.automation import (
     AutomationOverview,
+    AlertOverview,
+    SmartAlert,
     BillCreate,
     BillResponse,
     RecurringRuleCreate,
@@ -171,4 +173,82 @@ async def overview(
         projected_30d_net=projected,
         recurring_rules=[RecurringRuleResponse.model_validate(row) for row in rules],
         bills=[BillResponse.model_validate(row) for row in bills],
+    )
+
+
+
+@router.get("/alerts", response_model=AlertOverview)
+async def smart_alerts(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AlertOverview:
+    today = date.today()
+    horizon = today + timedelta(days=30)
+    bills = list(
+        (
+            await db.execute(
+                select(BillReminder)
+                .where(
+                    BillReminder.user_id == user.id,
+                    BillReminder.is_paid.is_(False),
+                    BillReminder.due_on <= horizon,
+                )
+                .order_by(BillReminder.due_on.asc())
+            )
+        ).scalars().all()
+    )
+
+    alerts: list[SmartAlert] = []
+    for bill in bills:
+        days = (bill.due_on - today).days
+        reminder_window = bill.reminder_days_before
+
+        if days < 0:
+            alerts.append(
+                SmartAlert(
+                    alert_type="overdue_bill",
+                    severity="critical",
+                    title=bill.name + " is overdue",
+                    message="Payment was due " + str(abs(days)) + " day(s) ago.",
+                    due_on=bill.due_on,
+                    amount=bill.amount,
+                    source_id=bill.id,
+                )
+            )
+        elif days <= reminder_window:
+            alerts.append(
+                SmartAlert(
+                    alert_type="bill_due",
+                    severity="warning" if days > 0 else "critical",
+                    title=bill.name + (" is due today" if days == 0 else " is due soon"),
+                    message=(
+                        ("Due today." if days == 0 else "Due in " + str(days) + " day(s).")
+                        + (" Auto-renew is enabled." if bill.auto_renew else "")
+                    ),
+                    due_on=bill.due_on,
+                    amount=bill.amount,
+                    source_id=bill.id,
+                )
+            )
+        elif bill.bill_type == "subscription" and bill.auto_renew and days <= 7:
+            alerts.append(
+                SmartAlert(
+                    alert_type="subscription_renewal",
+                    severity="info",
+                    title=bill.name + " renews soon",
+                    message="Subscription renewal is scheduled in " + str(days) + " day(s).",
+                    due_on=bill.due_on,
+                    amount=bill.amount,
+                    source_id=bill.id,
+                )
+            )
+
+    critical = sum(1 for alert in alerts if alert.severity == "critical")
+    warning = sum(1 for alert in alerts if alert.severity == "warning")
+    info = sum(1 for alert in alerts if alert.severity == "info")
+    return AlertOverview(
+        critical_count=critical,
+        warning_count=warning,
+        info_count=info,
+        alerts=alerts,
     )
