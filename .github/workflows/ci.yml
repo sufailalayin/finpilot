@@ -87,6 +87,9 @@ jobs:
       - name: Build debug APK
         working-directory: /tmp/finpilot_mobile
         run: flutter build apk --debug --dart-define=FINPILOT_API_BASE_URL=https://finpilot-backend-production-1cb7.up.railway.app/api/v1
+      - name: Build release validation AAB
+        working-directory: /tmp/finpilot_mobile
+        run: flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL=https://finpilot-backend-production-1cb7.up.railway.app/api/v1
       - name: Upload Android validation artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -94,3 +97,4 @@ jobs:
           path: |
             /tmp/finpilot_mobile/android
             /tmp/finpilot_mobile/build/app/outputs/flutter-apk/app-debug.apk
+            /tmp/finpilot_mobile/build/app/outputs/bundle/release/app-release.aab
