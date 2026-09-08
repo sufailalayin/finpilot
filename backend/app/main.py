@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import get_settings
+from app.core.production import validate_production_settings
 from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
 from app.routers.auth import router as auth_router
@@ -10,15 +12,15 @@ from app.routers.health import router as health_router
 from app.routers.planning import router as planning_router
 from app.routers.subscriptions import router as subscriptions_router
 
+settings = get_settings()
+validate_production_settings(settings)
+
 app = FastAPI(
     title="FinPilot API",
     version="0.1.0",
     description="Personal Finance AI by Hastron Ventures",
 )
 
-from app.core.config import get_settings
-
-settings = get_settings()
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
