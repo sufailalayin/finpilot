@@ -5,6 +5,11 @@ class FinanceService {
 
   final ApiClient _api;
 
+  Future<Map<String, dynamic>> netWorthSummary() async {
+    final response = await _api.dio.get('/finance/net-worth');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<List<dynamic>> listAccountBalances() async {
     final response = await _api.dio.get('/finance/accounts/balances');
     return response.data as List<dynamic>;
