@@ -5,7 +5,6 @@ import '../../core/api_client.dart';
 import '../accounts/accounts_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
-import '../finance/add_account_screen.dart';
 import '../finance/add_transaction_screen.dart';
 import '../insights/insights_screen.dart';
 import '../planning/planning_screen.dart';
