@@ -6,6 +6,7 @@ import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
 import '../finance/add_account_screen.dart';
 import '../finance/add_transaction_screen.dart';
+import '../planning/planning_screen.dart';
 import 'dashboard_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -99,6 +100,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('FinPilot'),
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PlanningScreen(api: widget.api),
+                ),
+              );
+            },
+            icon: const Icon(Icons.track_changes_outlined),
+            tooltip: 'Budgets & goals',
+          ),
           IconButton(
             onPressed: _logout,
             icon: const Icon(Icons.logout),
