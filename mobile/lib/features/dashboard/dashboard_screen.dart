@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
-import '../ai/ai_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
 import '../finance/add_account_screen.dart';
