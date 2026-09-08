@@ -97,6 +97,27 @@ class _PaywallScreenState extends State<PaywallScreen> {
     }
   }
 
+  Future<void> _restore() async {
+    if (_purchaseBusy) return;
+    setState(() {
+      _purchaseBusy = true;
+      _message = 'Checking previous Google Play purchases...';
+    });
+    try {
+      await _billing.restorePurchases();
+      if (!mounted) return;
+      setState(() {
+        _message = 'Restore request sent to Google Play.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _purchaseBusy = false;
+        _message = 'Unable to restore purchases right now.';
+      });
+    }
+  }
+
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
       if (!mounted) return;
@@ -237,6 +258,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
                         ? 'Yearly plan unavailable'
                         : 'Yearly — ' + yearly.price,
                   ),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: _purchaseBusy ? null : _restore,
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Restore purchase'),
                 ),
                 if (_message != null) ...[
                   const SizedBox(height: 16),
