@@ -289,6 +289,26 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: _exportData,
                       ),
+                      ListTile(
+                        leading: const Icon(Icons.table_view_outlined),
+                        title: const Text('Export transactions CSV'),
+                        subtitle: const Text(
+                          'Share a spreadsheet-friendly transaction file.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () async {
+                          try {
+                            await _privacy.exportTransactionsCsv();
+                          } catch (_) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Unable to export transactions.'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),
