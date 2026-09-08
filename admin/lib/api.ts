@@ -1,5 +1,4 @@
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_FINPILOT_API_BASE_URL ?? "http://localhost:8000/api/v1";
+export const API_BASE_URL = "/api/backend";
 
 export async function fetchAdminOverview(token: string) {
   const response = await fetch(API_BASE_URL + "/admin/overview", {
