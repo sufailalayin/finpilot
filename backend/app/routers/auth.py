@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.services.default_categories import build_default_categories
 from app.services.trials import create_trial_entitlement, normalize_entitlement
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -28,6 +29,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     user.entitlement = create_trial_entitlement()
 
     db.add(user)
+    await db.flush()
+    db.add_all(build_default_categories(user.id))
     await db.commit()
 
     result = await db.execute(
