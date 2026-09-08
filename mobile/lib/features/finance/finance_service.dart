@@ -15,12 +15,12 @@ class FinanceService {
     return (response.data as List<dynamic>);
   }
 
-  Future<void> createAccount({
+  Future<Map<String, dynamic>> createAccount({
     required String name,
     required String accountType,
     required double openingBalance,
   }) async {
-    await _api.dio.post(
+    final response = await _api.dio.post(
       '/finance/accounts',
       data: {
         'name': name.trim(),
@@ -29,9 +29,10 @@ class FinanceService {
         'opening_balance': openingBalance,
       },
     );
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
-  Future<void> createTransaction({
+  Future<Map<String, dynamic>> createTransaction({
     required String accountId,
     required String? categoryId,
     required String transactionType,
@@ -40,7 +41,7 @@ class FinanceService {
     String? merchant,
     String? note,
   }) async {
-    await _api.dio.post(
+    final response = await _api.dio.post(
       '/finance/transactions',
       data: {
         'account_id': accountId,
@@ -52,5 +53,6 @@ class FinanceService {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
       },
     );
+    return Map<String, dynamic>.from(response.data as Map);
   }
 }
