@@ -11,10 +11,15 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
-  const authorization = request.headers.get("authorization");
+  const cookieToken = request.cookies.get("finpilot_admin_session")?.value;
+  const incomingAuthorization = request.headers.get("authorization");
 
   if (contentType) headers.set("content-type", contentType);
-  if (authorization) headers.set("authorization", authorization);
+  if (cookieToken) {
+    headers.set("authorization", "Bearer " + cookieToken);
+  } else if (incomingAuthorization) {
+    headers.set("authorization", incomingAuthorization);
+  }
 
   const init: RequestInit = {
     method: request.method,
@@ -34,6 +39,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       status: response.status,
       headers: {
         "content-type": response.headers.get("content-type") ?? "application/json",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
       },
     });
   } catch {
