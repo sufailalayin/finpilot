@@ -62,17 +62,6 @@ async def register(payload: RegisterRequest, request: Request, db: AsyncSession 
     )
     user = result.scalar_one()
 
-    db.add(
-        SecurityAuditEvent(
-            user_id=user.id,
-            event_type="login_success",
-            description="Successful sign in.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
-        )
-    )
-    await db.commit()
-
     return TokenResponse(
         access_token=create_access_token(str(user.id), user.token_version),
         user=UserResponse.model_validate(user),
@@ -99,8 +88,19 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
         if user.entitlement.status != previous_status:
             await db.commit()
 
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="login_success",
+            description="Successful sign in.",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
+        access_token=create_access_token(str(user.id), user.token_version),
         user=UserResponse.model_validate(user),
     )
 
