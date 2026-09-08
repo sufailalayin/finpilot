@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../accounts/accounts_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
 import '../finance/add_account_screen.dart';
@@ -317,9 +318,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 10),
                     _quickAction(
-                      label: 'Account',
+                      label: 'Accounts',
                       icon: Icons.account_balance_wallet_outlined,
-                      onTap: _openAccount,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AccountsScreen(api: widget.api),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     _quickAction(
@@ -344,8 +349,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                     ),
                     TextButton(
-                      onPressed: _openAccount,
-                      child: const Text('Add new'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AccountsScreen(api: widget.api),
+                        ),
+                      ),
+                      child: const Text('Manage'),
                     ),
                   ],
                 ),
