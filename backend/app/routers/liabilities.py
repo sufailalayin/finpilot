@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.entitlements import require_pro_user
 from app.models.finance import Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/liabilities", tags=["liabilities"])
 @router.post("", response_model=LiabilityResponse, status_code=status.HTTP_201_CREATED)
 async def create_liability(
     payload: LiabilityCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> LiabilityResponse:
     if payload.outstanding_principal > payload.original_principal:
@@ -41,7 +42,7 @@ async def create_liability(
 
 @router.get("", response_model=list[LiabilityResponse])
 async def list_liabilities(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[LiabilityResponse]:
     result = await db.execute(
@@ -56,7 +57,7 @@ async def list_liabilities(
 async def update_liability(
     liability_id: uuid.UUID,
     payload: LiabilityUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> LiabilityResponse:
     item = await db.scalar(
@@ -78,7 +79,7 @@ async def update_liability(
 @router.delete("/{liability_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_liability(
     liability_id: uuid.UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     item = await db.scalar(
@@ -94,7 +95,7 @@ async def delete_liability(
 async def record_payment(
     liability_id: uuid.UUID,
     payload: LiabilityPaymentCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> LiabilityPaymentResponse:
     item = await db.scalar(
@@ -124,7 +125,7 @@ async def record_payment(
 
 @router.get("/overview/summary", response_model=DebtOverview)
 async def debt_overview(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> DebtOverview:
     liabilities = list(
