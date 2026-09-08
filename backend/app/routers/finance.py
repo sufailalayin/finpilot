@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
+from app.models.liability import Liability
 from app.models.user import User
-from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse
+from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -320,3 +321,53 @@ async def delete_category(
         raise HTTPException(status_code=404, detail="Category not found")
     await db.delete(category)
     await db.commit()
+
+
+@router.get("/net-worth", response_model=NetWorthResponse)
+async def net_worth_summary(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NetWorthResponse:
+    accounts = list(
+        (
+            await db.execute(
+                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+            )
+        ).scalars().all()
+    )
+    account_assets = Decimal("0.00")
+    for account in accounts:
+        movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                            (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(
+                Transaction.user_id == user.id,
+                Transaction.account_id == account.id,
+            )
+        )
+        account_assets += account.opening_balance + (movement or Decimal("0.00"))
+
+    liabilities = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Liability.outstanding_principal),
+                Decimal("0.00"),
+            )
+        ).where(Liability.user_id == user.id)
+    )
+    liabilities = liabilities or Decimal("0.00")
+
+    return NetWorthResponse(
+        account_assets=account_assets,
+        liabilities=liabilities,
+        net_worth=account_assets - liabilities,
+    )
