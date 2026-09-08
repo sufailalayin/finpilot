@@ -20,7 +20,7 @@ class AccountUpdate(BaseModel):
     opening_balance: Decimal | None = None
 
 
-class AccountBalanceResponse(AccountResponse if False else BaseModel):
+class AccountBalanceResponse(BaseModel):
     id: uuid.UUID
     name: str
     account_type: AccountType
