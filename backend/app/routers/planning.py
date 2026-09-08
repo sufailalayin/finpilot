@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.entitlements import require_pro_user
 from app.models.finance import Category, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
@@ -108,7 +109,7 @@ async def contribute_to_goal(
 
 @router.get("/budgets/dashboard", response_model=BudgetDashboard)
 async def budget_dashboard(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> BudgetDashboard:
     today = date.today()
@@ -187,7 +188,7 @@ async def budget_dashboard(
 
 @router.get("/goals/dashboard", response_model=GoalDashboard)
 async def goal_dashboard(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> GoalDashboard:
     today = date.today()
