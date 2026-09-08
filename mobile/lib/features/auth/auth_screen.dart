@@ -16,15 +16,42 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   late final AuthService _auth = AuthService(widget.api);
+
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _name = TextEditingController();
 
   bool _registerMode = false;
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
 
+  bool get _formLooksValid {
+    final email = _email.text.trim();
+    final password = _password.text;
+    final emailOk = email.contains('@') && email.contains('.');
+    final passwordOk = password.length >= 8;
+    final nameOk = !_registerMode || _name.text.trim().isNotEmpty;
+    return emailOk && passwordOk && nameOk;
+  }
+
+  void _switchMode() {
+    setState(() {
+      _registerMode = !_registerMode;
+      _error = null;
+    });
+  }
+
   Future<void> _submit() async {
+    if (!_formLooksValid || _loading) {
+      setState(() {
+        _error = _registerMode
+            ? 'Enter your name, a valid email, and a password with at least 8 characters.'
+            : 'Enter a valid email and password.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -54,10 +81,12 @@ class _AuthScreenState extends State<AuthScreen> {
       final data = error.response?.data;
       final message = data is Map<String, dynamic> && data['detail'] != null
           ? data['detail'].toString()
-          : 'Unable to connect to FinPilot.';
-      setState(() => _error = message);
+          : 'Unable to connect to FinPilot. Please try again.';
+      if (mounted) setState(() => _error = message);
     } catch (_) {
-      setState(() => _error = 'Something went wrong. Please try again.');
+      if (mounted) {
+        setState(() => _error = 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -73,95 +102,273 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            const SizedBox(height: 48),
-            Text(
-              'FinPilot',
-              style: Theme.of(context)
-                  .textTheme
-                  .displaySmall
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _registerMode
-                  ? 'Start your 7-day Pro trial'
-                  : 'Welcome back',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 32),
-            if (_registerMode) ...[
-              TextField(
-                controller: _name,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Full name',
-                  border: OutlineInputBorder(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 52,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: scheme.primary,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(
+                                Icons.auto_graph_rounded,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'FinPilot',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.5,
+                                      ),
+                                ),
+                                Text(
+                                  'Personal Finance AI',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 34),
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: scheme.outlineVariant),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 24,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                _registerMode
+                                    ? 'Create your FinPilot account'
+                                    : 'Welcome back',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _registerMode
+                                    ? 'Start your 7-day Pro trial and set up your financial command center.'
+                                    : 'Sign in to continue to your accounts, budgets, goals and AI insights.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      height: 1.45,
+                                    ),
+                              ),
+                              const SizedBox(height: 24),
+                              if (_registerMode) ...[
+                                TextField(
+                                  controller: _name,
+                                  textInputAction: TextInputAction.next,
+                                  textCapitalization: TextCapitalization.words,
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Full name',
+                                    hintText: 'Your name',
+                                    prefixIcon: Icon(Icons.person_outline),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              TextField(
+                                controller: _email,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                onChanged: (_) => setState(() {}),
+                                decoration: const InputDecoration(
+                                  labelText: 'Email address',
+                                  hintText: 'you@example.com',
+                                  prefixIcon: Icon(Icons.mail_outline),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _password,
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                onChanged: (_) => setState(() {}),
+                                onSubmitted: (_) => _submit(),
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  hintText: 'Minimum 8 characters',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscurePassword
+                                        ? 'Show password'
+                                        : 'Hide password',
+                                    onPressed: () => setState(
+                                      () => _obscurePassword =
+                                          !_obscurePassword,
+                                    ),
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (_error != null) ...[
+                                const SizedBox(height: 14),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: scheme.errorContainer,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        color: scheme.onErrorContainer,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _error!,
+                                          style: TextStyle(
+                                            color: scheme.onErrorContainer,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 22),
+                              SizedBox(
+                                height: 52,
+                                child: FilledButton(
+                                  onPressed:
+                                      _loading || !_formLooksValid
+                                          ? null
+                                          : _submit,
+                                  child: _loading
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : Text(
+                                          _registerMode
+                                              ? 'Create account'
+                                              : 'Sign in securely',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextButton(
+                                onPressed: _loading ? null : _switchMode,
+                                child: Text(
+                                  _registerMode
+                                      ? 'Already have an account? Sign in'
+                                      : 'New to FinPilot? Start free trial',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.verified_user_outlined, size: 22),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Secure token-based sign in • Optional PIN & biometric app lock • Privacy controls inside FinPilot',
+                                  style: TextStyle(height: 1.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Center(
+                          child: Text(
+                            'FinPilot by Hastron Ventures',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _password,
-              obscureText: true,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _loading ? null : _submit,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Text(
-                  _loading
-                      ? 'Please wait...'
-                      : _registerMode
-                          ? 'Create account'
-                          : 'Sign in',
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => setState(() {
-                        _registerMode = !_registerMode;
-                        _error = null;
-                      }),
-              child: Text(
-                _registerMode
-                    ? 'Already have an account? Sign in'
-                    : 'New to FinPilot? Start free trial',
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Center(child: Text('FinPilot by Hastron Ventures')),
-          ],
+            );
+          },
         ),
       ),
     );
