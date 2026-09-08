@@ -7,6 +7,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.finance import router as finance_router
 from app.routers.health import router as health_router
 from app.routers.planning import router as planning_router
+from app.routers.subscriptions import router as subscriptions_router
 
 app = FastAPI(
     title="FinPilot API",
@@ -21,6 +22,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(planning_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(subscriptions_router, prefix="/api/v1")
 
 
 @app.get("/")
