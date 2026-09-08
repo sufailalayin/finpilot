@@ -65,6 +65,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
           final score = data['financial_health_score'] as int? ?? 0;
           final savingsRate =
               double.tryParse(data['savings_rate'].toString()) ?? 0;
+          final healthGrade = data['health_grade']?.toString() ?? 'Not rated';
+          final healthComponents =
+              (data['health_components'] as List<dynamic>?) ?? const [];
           final categories =
               (data['top_categories'] as List<dynamic>?) ?? const [];
           final budgets = (data['budgets'] as List<dynamic>?) ?? const [];
@@ -116,13 +119,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              score >= 80
-                                  ? 'Excellent'
-                                  : score >= 65
-                                      ? 'Good'
-                                      : score >= 45
-                                          ? 'Needs attention'
-                                          : 'Build healthier habits',
+                              healthGrade,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),
@@ -137,6 +134,58 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+                Text(
+                  'Health breakdown',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                ...healthComponents.map((raw) {
+                  final item = Map<String, dynamic>.from(raw as Map);
+                  final componentScore =
+                      int.tryParse(item['score'].toString()) ?? 0;
+                  final maxScore =
+                      int.tryParse(item['max_score'].toString()) ?? 1;
+                  final ratio = maxScore <= 0
+                      ? 0.0
+                      : (componentScore / maxScore).clamp(0.0, 1.0);
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item['label'].toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                componentScore.toString() +
+                                    '/' +
+                                    maxScore.toString(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          LinearProgressIndicator(value: ratio),
+                          const SizedBox(height: 7),
+                          Text(item['message'].toString()),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
                 const SizedBox(height: 16),
                 FilledButton.tonalIcon(
                   onPressed: () => Navigator.of(context).push(
