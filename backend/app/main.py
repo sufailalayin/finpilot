@@ -15,6 +15,7 @@ from app.routers.health import router as health_router
 from app.routers.liabilities import router as liabilities_router
 from app.routers.planning import router as planning_router
 from app.routers.subscriptions import router as subscriptions_router
+from app.routers.security_privacy import router as security_privacy_router
 
 settings = get_settings()
 validate_production_settings(settings)
@@ -46,6 +47,7 @@ app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(automation_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
 app.include_router(subscriptions_router, prefix="/api/v1")
+app.include_router(security_privacy_router, prefix="/api/v1")
 
 
 @app.get("/")
