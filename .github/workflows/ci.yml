@@ -1,0 +1,78 @@
+name: FinPilot CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: finpilot
+          POSTGRES_USER: finpilot
+          POSTGRES_PASSWORD: finpilot_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finpilot -d finpilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      FINPILOT_DATABASE_URL: postgresql+asyncpg://finpilot:finpilot_dev@localhost:5432/finpilot
+      FINPILOT_JWT_SECRET: ci-only-secret
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: alembic upgrade head
+      - run: pytest -q
+
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npm run build
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Generate Android scaffold in temporary project
+        run: |
+          flutter create --platforms=android --org com.hastronventures --project-name finpilot /tmp/finpilot_mobile
+          rm -rf /tmp/finpilot_mobile/lib
+          cp -R mobile/lib /tmp/finpilot_mobile/lib
+          cp mobile/pubspec.yaml /tmp/finpilot_mobile/pubspec.yaml
+      - name: Install Flutter dependencies
+        working-directory: /tmp/finpilot_mobile
+        run: flutter pub get
+      - name: Analyze Flutter code
+        working-directory: /tmp/finpilot_mobile
+        run: flutter analyze
+      - name: Build debug APK
+        working-directory: /tmp/finpilot_mobile
+        run: flutter build apk --debug
