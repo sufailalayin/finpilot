@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.user import User
@@ -356,6 +357,16 @@ async def net_worth_summary(
         )
         account_assets += account.opening_balance + (movement or Decimal("0.00"))
 
+    investment_assets = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Asset.current_value),
+                Decimal("0.00"),
+            )
+        ).where(Asset.user_id == user.id)
+    )
+    investment_assets = investment_assets or Decimal("0.00")
+
     liabilities = await db.scalar(
         select(
             func.coalesce(
@@ -367,7 +378,7 @@ async def net_worth_summary(
     liabilities = liabilities or Decimal("0.00")
 
     return NetWorthResponse(
-        account_assets=account_assets,
+        account_assets=account_assets + investment_assets,
         liabilities=liabilities,
-        net_worth=account_assets - liabilities,
+        net_worth=account_assets + investment_assets - liabilities,
     )
