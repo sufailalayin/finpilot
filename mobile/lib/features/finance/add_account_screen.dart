@@ -36,16 +36,18 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     });
 
     try {
-      await _finance.createAccount(
+      final saved = await _finance.createAccount(
         name: name,
         accountType: _accountType,
         openingBalance: opening,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account saved successfully')),
-      );
+      final savedName = saved['name']?.toString() ?? name;
       Navigator.of(context).pop(true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Account saved: ' + savedName)),
+      );
     } catch (_) {
       setState(() => _error = 'Unable to create account.');
     } finally {
