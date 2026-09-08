@@ -15,6 +15,11 @@ class PlanningService {
     return response.data as List<dynamic>;
   }
 
+  Future<Map<String, dynamic>> goalDashboard() async {
+    final response = await _api.dio.get('/planning/goals/dashboard');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<List<dynamic>> listGoals() async {
     final response = await _api.dio.get('/planning/goals');
     return response.data as List<dynamic>;
@@ -24,12 +29,14 @@ class PlanningService {
     required String name,
     required double targetAmount,
     required double currentAmount,
+    String goalType = 'other',
     DateTime? targetDate,
   }) async {
     await _api.dio.post(
       '/planning/goals',
       data: {
         'name': name.trim(),
+        'goal_type': goalType,
         'target_amount': targetAmount,
         'current_amount': currentAmount,
         'target_date': targetDate?.toIso8601String().split('T').first,
