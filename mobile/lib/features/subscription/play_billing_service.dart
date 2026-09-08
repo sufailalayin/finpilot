@@ -24,6 +24,10 @@ class PlayBillingService {
     return response.productDetails;
   }
 
+  Future<void> restorePurchases() async {
+    await _billing.restorePurchases();
+  }
+
   Future<bool> buy(ProductDetails product) {
     return _billing.buyNonConsumable(
       purchaseParam: PurchaseParam(productDetails: product),
