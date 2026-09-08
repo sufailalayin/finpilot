@@ -6,9 +6,9 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
-from app.models.finance import Category, Transaction, TransactionType
+from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
-from app.models.planning import Budget
+from app.models.planning import Budget, SavingsGoal
 
 
 async def build_analytics(db: AsyncSession, user_id) -> dict:
@@ -138,29 +138,227 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             }
         )
 
-    score = 50
+    account_rows = list(
+        (
+            await db.execute(
+                select(FinanceAccount).where(FinanceAccount.user_id == user_id)
+            )
+        ).scalars().all()
+    )
+    liquid_assets = Decimal("0.00")
+    for account in account_rows:
+        movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                            (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account.id,
+            )
+        )
+        liquid_assets += account.opening_balance + (movement or Decimal("0.00"))
+
+    liabilities_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Liability.outstanding_principal),
+                Decimal("0.00"),
+            )
+        ).where(Liability.user_id == user_id)
+    )
+    liabilities_total = liabilities_total or Decimal("0.00")
+
+    monthly_emi = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Liability.emi_amount),
+                Decimal("0.00"),
+            )
+        ).where(Liability.user_id == user_id)
+    )
+    monthly_emi = monthly_emi or Decimal("0.00")
+
+    goal_rows = list(
+        (
+            await db.execute(
+                select(SavingsGoal).where(SavingsGoal.user_id == user_id)
+            )
+        ).scalars().all()
+    )
+    goal_target = sum((g.target_amount for g in goal_rows), Decimal("0.00"))
+    goal_saved = sum((g.current_amount for g in goal_rows), Decimal("0.00"))
+    goal_progress = float(goal_saved / goal_target * 100) if goal_target > 0 else 0.0
+
+    savings_score = 0
     if income > 0:
         if savings_rate >= 30:
-            score += 25
+            savings_score = 25
         elif savings_rate >= 20:
-            score += 20
+            savings_score = 21
         elif savings_rate >= 10:
-            score += 12
+            savings_score = 16
         elif savings_rate > 0:
-            score += 5
+            savings_score = 10
         else:
-            score -= 15
+            savings_score = 2
 
+    cashflow_score = 0
+    if income > 0:
         expense_ratio = float(expenses / income)
-        if expense_ratio <= 0.6:
-            score += 15
-        elif expense_ratio <= 0.8:
-            score += 8
-        elif expense_ratio > 1:
-            score -= 15
+        if expense_ratio <= 0.60:
+            cashflow_score = 20
+        elif expense_ratio <= 0.75:
+            cashflow_score = 16
+        elif expense_ratio <= 0.90:
+            cashflow_score = 10
+        elif expense_ratio <= 1.00:
+            cashflow_score = 6
+        else:
+            cashflow_score = 1
 
-    score -= min(over_budget_count * 8, 24)
-    score = max(0, min(100, score))
+    debt_score = 20
+    dti = float(monthly_emi / income * 100) if income > 0 else None
+    if liabilities_total > 0:
+        if dti is None:
+            debt_score = 8
+        elif dti <= 20:
+            debt_score = 20
+        elif dti <= 35:
+            debt_score = 15
+        elif dti <= 50:
+            debt_score = 9
+        else:
+            debt_score = 3
+
+    budget_score = 15
+    if budget_rows:
+        over_count = sum(1 for row in budget_progress if row["status"] == "over")
+        warning_count = sum(1 for row in budget_progress if row["status"] == "warning")
+        budget_score = max(0, 15 - over_count * 6 - warning_count * 2)
+
+    emergency_score = 0
+    if expenses > 0:
+        emergency_months = float(liquid_assets / expenses)
+        if emergency_months >= 6:
+            emergency_score = 10
+        elif emergency_months >= 3:
+            emergency_score = 8
+        elif emergency_months >= 1:
+            emergency_score = 5
+        elif emergency_months > 0:
+            emergency_score = 2
+    elif liquid_assets > 0:
+        emergency_score = 10
+
+    goal_score = 0
+    if not goal_rows:
+        goal_score = 5
+    elif goal_progress >= 75:
+        goal_score = 10
+    elif goal_progress >= 50:
+        goal_score = 8
+    elif goal_progress >= 25:
+        goal_score = 6
+    elif goal_progress > 0:
+        goal_score = 4
+    else:
+        goal_score = 2
+
+    score = max(
+        0,
+        min(
+            100,
+            savings_score
+            + cashflow_score
+            + debt_score
+            + budget_score
+            + emergency_score
+            + goal_score,
+        ),
+    )
+
+    health_grade = (
+        "Excellent"
+        if score >= 85
+        else "Strong"
+        if score >= 70
+        else "Fair"
+        if score >= 55
+        else "Needs attention"
+        if score >= 40
+        else "High risk"
+    )
+
+    def component_status(value: int, maximum: int) -> str:
+        ratio = value / maximum if maximum else 0
+        return "good" if ratio >= 0.75 else "warning" if ratio >= 0.45 else "critical"
+
+    health_components = [
+        {
+            "key": "savings",
+            "label": "Savings",
+            "score": savings_score,
+            "max_score": 25,
+            "status": component_status(savings_score, 25),
+            "message": f"Savings rate is {savings_rate:.1f}%.",
+        },
+        {
+            "key": "cashflow",
+            "label": "Cash flow",
+            "score": cashflow_score,
+            "max_score": 20,
+            "status": component_status(cashflow_score, 20),
+            "message": "Compares monthly spending with recorded income.",
+        },
+        {
+            "key": "debt",
+            "label": "Debt load",
+            "score": debt_score,
+            "max_score": 20,
+            "status": component_status(debt_score, 20),
+            "message": (
+                f"EMI-to-income is {dti:.1f}%."
+                if dti is not None
+                else "Add income to calculate debt-to-income."
+            ),
+        },
+        {
+            "key": "budget",
+            "label": "Budget discipline",
+            "score": budget_score,
+            "max_score": 15,
+            "status": component_status(budget_score, 15),
+            "message": "Based on active budget usage and overruns.",
+        },
+        {
+            "key": "emergency",
+            "label": "Emergency buffer",
+            "score": emergency_score,
+            "max_score": 10,
+            "status": component_status(emergency_score, 10),
+            "message": "Uses liquid account balances relative to monthly expenses.",
+        },
+        {
+            "key": "goals",
+            "label": "Goal progress",
+            "score": goal_score,
+            "max_score": 10,
+            "status": component_status(goal_score, 10),
+            "message": (
+                f"Overall goal progress is {goal_progress:.1f}%."
+                if goal_rows
+                else "No savings goals created yet."
+            ),
+        },
+    ]
 
     insights = []
 
@@ -231,6 +429,8 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
         "net": net,
         "savings_rate": round(savings_rate, 1),
         "financial_health_score": score,
+        "health_grade": health_grade,
+        "health_components": health_components,
         "top_categories": top_categories,
         "budgets": budget_progress,
         "insights": insights[:4],
