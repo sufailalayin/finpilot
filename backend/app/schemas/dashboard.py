@@ -31,7 +31,32 @@ class RecentTransaction(BaseModel):
     category_name: str | None = None
 
 
+class DashboardInsight(BaseModel):
+    title: str
+    value: str
+    subtitle: str | None = None
+    severity: str = "info"
+
+
+class DashboardAlert(BaseModel):
+    title: str
+    message: str
+    severity: str
+    due_on: date | None = None
+
+
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     accounts: list[AccountBalance]
     recent_transactions: list[RecentTransaction]
+    net_worth: Decimal
+    investment_assets: Decimal
+    liabilities: Decimal
+    savings_rate: float
+    financial_health_score: int
+    health_grade: str
+    active_budget_count: int
+    budget_warning_count: int
+    upcoming_alert_count: int
+    insights: list[DashboardInsight]
+    alerts: list[DashboardAlert]
