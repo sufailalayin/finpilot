@@ -11,6 +11,8 @@ class BudgetCreate(BaseModel):
     period_start: date
     period_end: date
     category_id: uuid.UUID | None = None
+    rollover_enabled: bool = False
+    alert_threshold_pct: Decimal = Field(default=Decimal("80.00"), ge=1, le=100)
 
 
 class BudgetResponse(BudgetCreate):
@@ -34,3 +36,28 @@ class SavingsGoalResponse(SavingsGoalCreate):
 
 class GoalContribution(BaseModel):
     amount: Decimal = Field(gt=0)
+
+
+class BudgetPerformance(BaseModel):
+    id: uuid.UUID
+    name: str
+    budget_amount: Decimal
+    spent: Decimal
+    remaining: Decimal
+    usage_pct: float
+    projected_spend: Decimal
+    projected_overrun: Decimal
+    status: str
+    rollover_enabled: bool
+    alert_threshold_pct: Decimal
+    period_start: date
+    period_end: date
+    category_id: uuid.UUID | None
+
+
+class BudgetDashboard(BaseModel):
+    total_budget: Decimal
+    total_spent: Decimal
+    total_remaining: Decimal
+    projected_total_spend: Decimal
+    budgets: list[BudgetPerformance]
