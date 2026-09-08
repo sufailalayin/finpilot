@@ -20,3 +20,18 @@ class GooglePlayVerifyResponse(BaseModel):
     plan_code: str
     status: str
     paid_until: datetime | None
+
+
+
+class FeatureAccess(BaseModel):
+    code: str
+    name: str
+    included: bool
+    premium: bool
+
+
+class SubscriptionFeaturesResponse(BaseModel):
+    plan_code: str
+    status: str
+    has_pro_access: bool
+    features: list[FeatureAccess]
