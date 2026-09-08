@@ -8,6 +8,7 @@ def apply_paid_entitlement(
     *,
     provider: str,
     provider_subscription_id: str,
+    provider_product_id: str,
     paid_until: datetime,
 ) -> Entitlement:
     if paid_until.tzinfo is None:
@@ -17,6 +18,7 @@ def apply_paid_entitlement(
     entitlement.status = EntitlementStatus.ACTIVE
     entitlement.provider = provider
     entitlement.provider_subscription_id = provider_subscription_id
+    entitlement.provider_product_id = provider_product_id
     entitlement.paid_until = paid_until
     return entitlement
 
