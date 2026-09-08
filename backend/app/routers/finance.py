@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.user import User
-from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse
+from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -286,3 +286,37 @@ async def create_transfer(payload: TransferCreate, user: User = Depends(get_curr
         outgoing=TransactionResponse.model_validate(outgoing),
         incoming=TransactionResponse.model_validate(incoming),
     )
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: uuid.UUID,
+    payload: CategoryUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryResponse:
+    category = await db.scalar(
+        select(Category).where(Category.id == category_id, Category.user_id == user.id)
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if payload.name is not None:
+        category.name = payload.name.strip()
+    await db.commit()
+    await db.refresh(category)
+    return CategoryResponse.model_validate(category)
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_category(
+    category_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    category = await db.scalar(
+        select(Category).where(Category.id == category_id, Category.user_id == user.id)
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    await db.delete(category)
+    await db.commit()
