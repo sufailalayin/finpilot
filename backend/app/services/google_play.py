@@ -92,6 +92,32 @@ class GooglePlayVerifier:
             raise RuntimeError("Unable to obtain Google Play access token")
         return credentials.token
 
+    async def acknowledge_subscription(
+        self,
+        product_id: str,
+        purchase_token: str,
+    ) -> None:
+        token = await self._access_token()
+        package_name = quote(settings.google_play_package_name, safe="")
+        product_id_encoded = quote(product_id, safe="")
+        purchase_token_encoded = quote(purchase_token, safe="")
+        url = (
+            "https://androidpublisher.googleapis.com/androidpublisher/v3/"
+            f"applications/{package_name}/purchases/subscriptions/"
+            f"{product_id_encoded}/tokens/{purchase_token_encoded}:acknowledge"
+        )
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json",
+                },
+                json={},
+            )
+        if response.status_code not in {200, 409}:
+            response.raise_for_status()
+
     async def verify_subscription(
         self,
         product_id: str,
