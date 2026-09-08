@@ -3,8 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_FINPILOT_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const API_BASE_URL = "/api/backend";
 
 export default function AdminLoginPage() {
   const router = useRouter();
