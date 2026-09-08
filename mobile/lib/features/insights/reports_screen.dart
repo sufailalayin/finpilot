@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import 'analytics_service.dart';
+import 'report_export_service.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key, required this.api});
@@ -16,6 +17,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   late final AnalyticsService _analytics = AnalyticsService(widget.api);
   late Future<Map<String, dynamic>> _future;
+  final _export = ReportExportService();
 
   final _money = NumberFormat.currency(
     locale: 'en_IN',
@@ -176,6 +178,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => _export.shareJson(data),
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Export report JSON'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _export.shareTrendCsv(data),
+                        icon: const Icon(Icons.table_view_outlined),
+                        label: const Text('Export trend CSV'),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 Row(
