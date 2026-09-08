@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     google_play_package_name: str = ""
     google_play_monthly_product_id: str = "finpilot_pro_monthly"
     google_play_yearly_product_id: str = "finpilot_pro_yearly"
+    google_play_service_account_json: str = ""
 
     openai_api_key: str = ""
     openai_model: str = "gpt-5.6-luna"
