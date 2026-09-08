@@ -12,8 +12,11 @@ from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
 from app.schemas.subscriptions import (
     GooglePlayVerifyRequest,
     GooglePlayVerifyResponse,
+    SubscriptionFeaturesResponse,
+    FeatureAccess,
     SubscriptionStatusResponse,
 )
+from app.services.entitlements import has_pro_access
 from app.services.google_play import get_google_play_verifier
 from app.services.subscriptions import apply_paid_entitlement, normalize_paid_entitlement
 from app.services.trials import normalize_entitlement
@@ -161,3 +164,42 @@ async def google_play_rtdn(
         entitlement.plan_code = PlanCode.FREE
 
     await db.commit()
+
+
+
+@router.get("/features", response_model=SubscriptionFeaturesResponse)
+async def subscription_features(
+    user: User = Depends(get_current_user),
+) -> SubscriptionFeaturesResponse:
+    entitlement = user.entitlement
+    pro = has_pro_access(entitlement)
+    plan_code = entitlement.plan_code.value if entitlement is not None else "free"
+    status_value = entitlement.status.value if entitlement is not None else "expired"
+
+    definitions = [
+        ("core_accounts", "Accounts & transactions", False),
+        ("basic_dashboard", "Core dashboard", False),
+        ("basic_budgets", "Basic budgets & goals", False),
+        ("ai_copilot", "AI Financial Copilot", True),
+        ("advanced_reports", "Advanced reports & exports", True),
+        ("smart_budgeting", "Forecast budgets & goal planner", True),
+        ("smart_alerts", "Smart financial alerts", True),
+        ("assets_liabilities", "Assets, investments, loans & EMI analytics", True),
+        ("health_score", "Financial Health Score 2.0", True),
+        ("security_plus", "Advanced security & privacy controls", True),
+    ]
+
+    return SubscriptionFeaturesResponse(
+        plan_code=plan_code,
+        status=status_value,
+        has_pro_access=pro,
+        features=[
+            FeatureAccess(
+                code=code,
+                name=name,
+                premium=premium,
+                included=(pro or not premium),
+            )
+            for code, name, premium in definitions
+        ],
+    )
