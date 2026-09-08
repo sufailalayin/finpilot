@@ -10,6 +10,7 @@ from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
+from app.services.analytics import build_analytics
 
 
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
@@ -63,15 +64,43 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         .limit(8)
     )
 
-    accounts = list(
+    account_models = list(
         (
             await db.execute(
-                select(FinanceAccount.name, FinanceAccount.opening_balance)
+                select(FinanceAccount)
                 .where(FinanceAccount.user_id == user_id)
                 .order_by(FinanceAccount.created_at.asc())
             )
-        ).all()
+        ).scalars().all()
     )
+    accounts = []
+    for account in account_models:
+        movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                            (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account.id,
+            )
+        )
+        accounts.append(
+            {
+                "name": account.name,
+                "account_type": account.account_type.value,
+                "current_balance": str(
+                    account.opening_balance + (movement or Decimal("0.00"))
+                ),
+            }
+        )
 
     budgets = list(
         (
@@ -175,6 +204,34 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         ).all()
     )
 
+    recent_transactions = list(
+        (
+            await db.execute(
+                select(
+                    Transaction.transaction_type,
+                    Transaction.amount,
+                    Transaction.occurred_on,
+                    Transaction.merchant,
+                    Transaction.note,
+                )
+                .where(Transaction.user_id == user_id)
+                .order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc())
+                .limit(20)
+            )
+        ).all()
+    )
+
+    health = await build_analytics(db, user_id)
+    account_total = sum(
+        (Decimal(account["current_balance"]) for account in accounts),
+        Decimal("0.00"),
+    )
+    asset_total = sum((row.current_value for row in assets), Decimal("0.00"))
+    debt_total = sum(
+        (row.outstanding_principal for row in liabilities),
+        Decimal("0.00"),
+    )
+
     return {
         "month": {
             "start": str(start),
@@ -187,10 +244,13 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
             {"name": name, "amount": str(amount)}
             for name, amount in category_rows.all()
         ],
-        "accounts": [
-            {"name": name, "opening_balance": str(opening_balance)}
-            for name, opening_balance in accounts
-        ],
+        "accounts": accounts,
+        "wealth_summary": {
+            "liquid_accounts": str(account_total),
+            "investment_assets": str(asset_total),
+            "liabilities": str(debt_total),
+            "net_worth": str(account_total + asset_total - debt_total),
+        },
         "budgets": [
             {
                 "name": name,
@@ -250,4 +310,21 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
             }
             for name, asset_type, quantity, cost_basis, current_value, maturity_date in assets
         ],
+        "recent_transactions": [
+            {
+                "transaction_type": transaction_type.value,
+                "amount": str(amount),
+                "occurred_on": str(occurred_on),
+                "merchant": merchant,
+                "note": note,
+            }
+            for transaction_type, amount, occurred_on, merchant, note in recent_transactions
+        ],
+        "financial_health": {
+            "score": health["financial_health_score"],
+            "grade": health["health_grade"],
+            "savings_rate": health["savings_rate"],
+            "components": health["health_components"],
+            "insights": health["insights"],
+        },
     }
