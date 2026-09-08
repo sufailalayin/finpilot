@@ -9,6 +9,17 @@ class DashboardData {
     required this.transactionCount,
     required this.accounts,
     required this.recentTransactions,
+    required this.netWorth,
+    required this.investmentAssets,
+    required this.liabilities,
+    required this.savingsRate,
+    required this.healthScore,
+    required this.healthGrade,
+    required this.activeBudgetCount,
+    required this.budgetWarningCount,
+    required this.upcomingAlertCount,
+    required this.insights,
+    required this.alerts,
   });
 
   final double totalBalance;
@@ -18,6 +29,17 @@ class DashboardData {
   final int transactionCount;
   final List<dynamic> accounts;
   final List<dynamic> recentTransactions;
+  final double netWorth;
+  final double investmentAssets;
+  final double liabilities;
+  final double savingsRate;
+  final int healthScore;
+  final String healthGrade;
+  final int activeBudgetCount;
+  final int budgetWarningCount;
+  final int upcomingAlertCount;
+  final List<dynamic> insights;
+  final List<dynamic> alerts;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] as Map<String, dynamic>;
@@ -32,6 +54,20 @@ class DashboardData {
       accounts: (json['accounts'] as List<dynamic>?) ?? const [],
       recentTransactions:
           (json['recent_transactions'] as List<dynamic>?) ?? const [],
+      netWorth: money(json['net_worth']),
+      investmentAssets: money(json['investment_assets']),
+      liabilities: money(json['liabilities']),
+      savingsRate: double.tryParse(json['savings_rate'].toString()) ?? 0,
+      healthScore: int.tryParse(json['financial_health_score'].toString()) ?? 0,
+      healthGrade: json['health_grade']?.toString() ?? 'Not rated',
+      activeBudgetCount:
+          int.tryParse(json['active_budget_count'].toString()) ?? 0,
+      budgetWarningCount:
+          int.tryParse(json['budget_warning_count'].toString()) ?? 0,
+      upcomingAlertCount:
+          int.tryParse(json['upcoming_alert_count'].toString()) ?? 0,
+      insights: (json['insights'] as List<dynamic>?) ?? const [],
+      alerts: (json['alerts'] as List<dynamic>?) ?? const [],
     );
   }
 }
