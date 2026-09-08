@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import '../automation/automation_screen.dart';
+import '../liabilities/liabilities_screen.dart';
 import 'planning_service.dart';
 
 class PlanningScreen extends StatefulWidget {
@@ -143,6 +144,16 @@ class _PlanningScreenState extends State<PlanningScreen> {
             ),
             icon: const Icon(Icons.auto_mode_outlined),
             label: const Text('Bills, recurring & cash-flow forecast'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LiabilitiesScreen(api: widget.api),
+              ),
+            ),
+            icon: const Icon(Icons.account_balance_outlined),
+            label: const Text('Loans, EMI & debt analytics'),
           ),
           const SizedBox(height: 24),
           Text('Budgets', style: Theme.of(context).textTheme.titleLarge),
