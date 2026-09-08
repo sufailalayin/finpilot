@@ -8,6 +8,7 @@ import '../ai/ai_screen.dart';
 import '../finance/add_account_screen.dart';
 import '../finance/add_transaction_screen.dart';
 import '../planning/planning_screen.dart';
+import '../subscription/paywall_screen.dart';
 import 'dashboard_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -101,6 +102,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('FinPilot'),
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PaywallScreen(api: widget.api),
+                ),
+              );
+            },
+            icon: const Icon(Icons.workspace_premium_outlined),
+            tooltip: 'FinPilot Pro',
+          ),
           IconButton(
             onPressed: () {
               Navigator.of(context).push(
