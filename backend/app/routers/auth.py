@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.user import User
+from app.models.user import SecurityAuditEvent, User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from app.services.default_categories import build_default_categories
 from app.services.trials import create_trial_entitlement, normalize_entitlement
@@ -14,8 +14,23 @@ from app.services.trials import create_trial_entitlement, normalize_entitlement
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _request_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:64]
+    if request.client:
+        return request.client.host[:64]
+    return None
+
+
+def _user_agent(request: Request) -> str | None:
+    value = request.headers.get("user-agent")
+    return value[:500] if value else None
+
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def register(payload: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     email = payload.email.lower().strip()
     existing = await db.scalar(select(User.id).where(User.email == email))
     if existing is not None:
@@ -31,6 +46,15 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     db.add(user)
     await db.flush()
     db.add_all(build_default_categories(user.id))
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="account_registered",
+            description="Account created.",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
     await db.commit()
 
     result = await db.execute(
@@ -38,14 +62,25 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     )
     user = result.scalar_one()
 
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="login_success",
+            description="Successful sign in.",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
+        access_token=create_access_token(str(user.id), user.token_version),
         user=UserResponse.model_validate(user),
     )
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     email = payload.email.lower().strip()
     result = await db.execute(
         select(User).options(selectinload(User.entitlement)).where(User.email == email)
