@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../accounts/accounts_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
+import '../automation/smart_alerts_screen.dart';
 import '../finance/add_transaction_screen.dart';
 import '../insights/insights_screen.dart';
 import '../planning/planning_screen.dart';
@@ -215,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'TOTAL BALANCE',
+                        'NET WORTH',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onPrimary,
                           fontSize: 12,
@@ -225,7 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        _money.format(data.totalBalance),
+                        _money.format(data.netWorth),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onPrimary,
                           fontSize: 34,
@@ -243,16 +244,183 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             size: 18,
                           ),
                           const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'This month: ' + _money.format(data.monthNet),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                           Text(
-                            'This month: ' + _money.format(data.monthNet),
+                            'Cash ' + _money.format(data.totalBalance),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onPrimary,
                               fontWeight: FontWeight.w600,
+                              fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Financial position',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _summaryTile(
+                      label: 'Health',
+                      value: data.healthScore.toString() + '/100',
+                      icon: Icons.favorite_outline,
+                    ),
+                    const SizedBox(width: 12),
+                    _summaryTile(
+                      label: 'Savings rate',
+                      value: data.savingsRate.toStringAsFixed(1) + '%',
+                      icon: Icons.savings_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _summaryTile(
+                      label: 'Investments',
+                      value: _money.format(data.investmentAssets),
+                      icon: Icons.trending_up,
+                    ),
+                    const SizedBox(width: 12),
+                    _summaryTile(
+                      label: 'Liabilities',
+                      value: _money.format(data.liabilities),
+                      icon: Icons.account_balance_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _summaryTile(
+                      label: 'Active budgets',
+                      value: data.activeBudgetCount.toString(),
+                      icon: Icons.pie_chart_outline,
+                    ),
+                    const SizedBox(width: 12),
+                    _summaryTile(
+                      label: 'Alerts',
+                      value: data.upcomingAlertCount.toString(),
+                      icon: Icons.notifications_active_outlined,
+                    ),
+                  ],
+                ),
+                if (data.alerts.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Needs attention',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SmartAlertsScreen(api: widget.api),
+                          ),
+                        ),
+                        child: const Text('View alerts'),
+                      ),
+                    ],
+                  ),
+                  ...data.alerts.take(3).map((raw) {
+                    final alert = Map<String, dynamic>.from(raw as Map);
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(
+                          alert['severity'] == 'critical'
+                              ? Icons.error_outline
+                              : Icons.warning_amber_rounded,
+                        ),
+                        title: Text(
+                          alert['title'].toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(alert['message'].toString()),
+                      ),
+                    );
+                  }),
+                ],
+                const SizedBox(height: 22),
+                Text(
+                  'Money intelligence',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 126,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: data.insights.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final item = Map<String, dynamic>.from(
+                        data.insights[index] as Map,
+                      );
+                      return Container(
+                        width: 180,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['title'].toString(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              item['value'].toString(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item['subtitle']?.toString() ?? '',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 18),
