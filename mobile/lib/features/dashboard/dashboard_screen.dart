@@ -43,13 +43,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _future;
   }
 
-  Future<void> _openAccount() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => AddAccountScreen(api: widget.api)),
-    );
-    if (created == true) await _refresh();
-  }
-
   Future<void> _openTransaction(String type) async {
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
