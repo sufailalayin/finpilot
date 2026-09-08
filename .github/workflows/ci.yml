@@ -102,7 +102,11 @@ jobs:
           cat > /tmp/finpilot_mobile/android/app/src/main/res/drawable/launch_background.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-              <item android:drawable="#F7F9F8" />
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="#F7F9F8" />
+                  </shape>
+              </item>
               <item
                   android:width="120dp"
                   android:height="120dp"
