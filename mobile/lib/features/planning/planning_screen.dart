@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../assets/assets_screen.dart';
 import '../automation/automation_screen.dart';
 import '../liabilities/liabilities_screen.dart';
 import 'planning_service.dart';
@@ -154,6 +155,16 @@ class _PlanningScreenState extends State<PlanningScreen> {
             ),
             icon: const Icon(Icons.account_balance_outlined),
             label: const Text('Loans, EMI & debt analytics'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AssetsScreen(api: widget.api),
+              ),
+            ),
+            icon: const Icon(Icons.savings_outlined),
+            label: const Text('Assets & investments'),
           ),
           const SizedBox(height: 24),
           Text('Budgets', style: Theme.of(context).textTheme.titleLarge),
