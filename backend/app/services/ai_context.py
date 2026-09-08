@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
+from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
 
 
@@ -137,6 +138,24 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         ).all()
     )
 
+    liabilities = list(
+        (
+            await db.execute(
+                select(
+                    Liability.name,
+                    Liability.liability_type,
+                    Liability.outstanding_principal,
+                    Liability.interest_rate,
+                    Liability.emi_amount,
+                    Liability.next_due_on,
+                )
+                .where(Liability.user_id == user_id)
+                .order_by(Liability.outstanding_principal.desc())
+                .limit(20)
+            )
+        ).all()
+    )
+
     return {
         "month": {
             "start": str(start),
@@ -189,5 +208,16 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 "frequency": frequency,
             }
             for name, amount, due_on, frequency in bills
+        ],
+        "liabilities": [
+            {
+                "name": name,
+                "liability_type": liability_type,
+                "outstanding_principal": str(outstanding_principal),
+                "interest_rate": str(interest_rate),
+                "emi_amount": str(emi_amount),
+                "next_due_on": str(next_due_on) if next_due_on else None,
+            }
+            for name, liability_type, outstanding_principal, interest_rate, emi_amount, next_due_on in liabilities
         ],
     }
