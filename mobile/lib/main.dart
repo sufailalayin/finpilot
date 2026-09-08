@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 
+import 'core/api_client.dart';
+import 'features/auth/auth_screen.dart';
+import 'features/auth/auth_service.dart';
+import 'features/dashboard/dashboard_screen.dart';
+
 void main() {
   runApp(const FinPilotApp());
 }
 
-class FinPilotApp extends StatelessWidget {
+class FinPilotApp extends StatefulWidget {
   const FinPilotApp({super.key});
+
+  @override
+  State<FinPilotApp> createState() => _FinPilotAppState();
+}
+
+class _FinPilotAppState extends State<FinPilotApp> {
+  late final ApiClient _api = ApiClient();
+  late final Future<bool> _session = AuthService(_api).hasSession();
 
   @override
   Widget build(BuildContext context) {
@@ -16,52 +29,21 @@ class FinPilotApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF185A4A),
       ),
-      home: const WelcomeScreen(),
-    );
-  }
-}
+      home: FutureBuilder<bool>(
+        future: _session,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key});
+          if (snapshot.data == true) {
+            return DashboardScreen(api: _api);
+          }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Spacer(),
-              Text(
-                'FinPilot',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your money. Clearer decisions.',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Track spending, build budgets, reach goals and get AI-powered financial insights.',
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {},
-                  child: const Text('Get started — 7 days free'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Center(child: Text('FinPilot by Hastron Ventures')),
-            ],
-          ),
-        ),
+          return AuthScreen(api: _api);
+        },
       ),
     );
   }
