@@ -5,6 +5,7 @@ import '../ai/ai_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../planning/planning_screen.dart';
 import '../profile/profile_screen.dart';
+import '../subscription/pro_feature_gate.dart';
 import '../transactions/transactions_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -25,7 +26,11 @@ class _AppShellState extends State<AppShell> {
       DashboardScreen(api: widget.api),
       TransactionsScreen(api: widget.api),
       PlanningScreen(api: widget.api),
-      AIScreen(api: widget.api),
+      ProFeatureGate(
+        api: widget.api,
+        featureCode: 'ai_copilot',
+        child: AIScreen(api: widget.api),
+      ),
       ProfileScreen(api: widget.api),
     ];
 
