@@ -3,8 +3,6 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const API_BASE_URL = "/api/backend";
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -18,23 +16,16 @@ export default function AdminLoginPage() {
     setError("");
 
     try {
-      const response = await fetch(API_BASE_URL + "/auth/login", {
+      const response = await fetch("/api/session/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ email, password }),
       });
-
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail ?? "Login failed");
-      }
-
-      if (!data.user?.is_admin) {
-        throw new Error("This account does not have administrator access.");
-      }
-
-      localStorage.setItem("finpilot_admin_token", data.access_token);
-      router.push("/");
+      if (!response.ok) throw new Error(data.detail ?? "Login failed");
+      router.replace("/");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -43,29 +34,38 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "80px auto", padding: 24 }}>
-      <p>Hastron Ventures</p>
-      <h1>FinPilot Admin</h1>
-      <form onSubmit={submit}>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Admin email"
-          type="email"
-          style={{ width: "100%", padding: 12, marginBottom: 12 }}
-        />
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          type="password"
-          style={{ width: "100%", padding: 12, marginBottom: 12 }}
-        />
-        {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
-        <button type="submit" disabled={loading} style={{ width: "100%", padding: 12 }}>
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
+    <main className="login-shell">
+      <section className="card login-card">
+        <div className="brand">
+          <div className="brand-mark">F</div>
+          <div>
+            <strong>FinPilot Admin</strong>
+            <small>Hastron Ventures</small>
+          </div>
+        </div>
+        <span className="eyebrow">Restricted access</span>
+        <h1>Welcome back</h1>
+        <p className="subtitle">Sign in with an authorized administrator account.</p>
+
+        <form onSubmit={submit}>
+          <div className="field">
+            <label htmlFor="email">Admin email</label>
+            <input id="email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input id="password" value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required />
+          </div>
+          {error ? <div className="error" style={{ marginTop: 14 }}>{error}</div> : null}
+          <button className="btn" type="submit" disabled={loading}>
+            {loading ? "Signing in…" : "Secure sign in"}
+          </button>
+        </form>
+
+        <p className="security-note">
+          Admin sessions are stored in a Secure, HttpOnly cookie and are not exposed to browser JavaScript.
+        </p>
+      </section>
     </main>
   );
 }
