@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../auth/auth_screen.dart';
+import '../categories/categories_screen.dart';
 import '../auth/auth_service.dart';
 import '../subscription/paywall_screen.dart';
 import '../subscription/subscription_service.dart';
@@ -159,6 +160,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             leading: Icon(Icons.currency_rupee),
             title: Text('Currency'),
             subtitle: Text('Indian Rupee (INR)'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.category_outlined),
+            title: const Text('Categories'),
+            subtitle: const Text('Manage income and expense categories'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CategoriesScreen(api: widget.api),
+              ),
+            ),
           ),
           const ListTile(
             leading: Icon(Icons.info_outline),
