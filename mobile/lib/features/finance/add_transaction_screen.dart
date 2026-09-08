@@ -44,7 +44,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Future<void> _load() async {
     try {
       final accounts = await _finance.listAccounts();
-      final categories = await _finance.listCategories();
+      var categories = await _finance.listCategories();
+      if (categories.isEmpty) {
+        categories = await _finance.bootstrapCategories();
+      }
 
       if (!mounted) return;
       setState(() {
