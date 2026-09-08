@@ -233,3 +233,160 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
         "budgets": budget_progress,
         "insights": insights[:4],
     }
+
+
+
+def _month_shift(year: int, month: int, offset: int) -> tuple[int, int]:
+    absolute = year * 12 + (month - 1) + offset
+    return absolute // 12, absolute % 12 + 1
+
+
+async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
+    from app.models.finance import FinanceAccount
+
+    today = date.today()
+    months = max(2, min(months, 24))
+    trend: list[dict] = []
+
+    accounts = list(
+        (
+            await db.execute(
+                select(FinanceAccount)
+                .where(FinanceAccount.user_id == user_id)
+                .order_by(FinanceAccount.created_at.asc())
+            )
+        ).scalars().all()
+    )
+
+    for offset in range(-(months - 1), 1):
+        year, month = _month_shift(today.year, today.month, offset)
+        start = date(year, month, 1)
+        end = date(year, month, monthrange(year, month)[1])
+
+        summary = (
+            await db.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                                else_=Decimal("0.00"),
+                            )
+                        ),
+                        Decimal("0.00"),
+                    ).label("income"),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount),
+                                else_=Decimal("0.00"),
+                            )
+                        ),
+                        Decimal("0.00"),
+                    ).label("expenses"),
+                ).where(
+                    Transaction.user_id == user_id,
+                    Transaction.occurred_on >= start,
+                    Transaction.occurred_on <= end,
+                )
+            )
+        ).one()
+
+        income = summary.income
+        expenses = summary.expenses
+        net = income - expenses
+        savings_rate = float((net / income) * 100) if income > 0 else 0.0
+
+        net_worth = Decimal("0.00")
+        for account in accounts:
+            if account.created_at.date() > end:
+                continue
+            movement = await db.scalar(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                                (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                                else_=Decimal("0.00"),
+                            )
+                        ),
+                        Decimal("0.00"),
+                    )
+                ).where(
+                    Transaction.user_id == user_id,
+                    Transaction.account_id == account.id,
+                    Transaction.occurred_on <= end,
+                )
+            )
+            net_worth += account.opening_balance + (movement or Decimal("0.00"))
+
+        trend.append(
+            {
+                "month": start.strftime("%Y-%m"),
+                "income": income,
+                "expenses": expenses,
+                "net": net,
+                "savings_rate": round(savings_rate, 1),
+                "net_worth": net_worth,
+            }
+        )
+
+    current = trend[-1]
+    previous = trend[-2] if len(trend) >= 2 else None
+
+    def change_pct(current_value, previous_value):
+        if previous_value in (None, 0, Decimal("0.00")):
+            return None
+        return round(float((current_value - previous_value) / abs(previous_value) * 100), 1)
+
+    current_year, current_month = today.year, today.month
+    current_start = date(current_year, current_month, 1)
+    current_end = date(current_year, current_month, monthrange(current_year, current_month)[1])
+
+    category_rows = (
+        await db.execute(
+            select(
+                func.coalesce(Category.name, "Uncategorized").label("category"),
+                func.sum(Transaction.amount).label("amount"),
+            )
+            .outerjoin(Category, Category.id == Transaction.category_id)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == TransactionType.EXPENSE,
+                Transaction.occurred_on >= current_start,
+                Transaction.occurred_on <= current_end,
+            )
+            .group_by(Category.name)
+            .order_by(func.sum(Transaction.amount).desc())
+        )
+    ).all()
+
+    total_expenses = current["expenses"]
+    categories = [
+        {
+            "category": row.category,
+            "amount": row.amount,
+            "percentage": round(float(row.amount / total_expenses * 100), 1)
+            if total_expenses > 0
+            else 0.0,
+        }
+        for row in category_rows
+    ]
+
+    return {
+        "months": months,
+        "current_month": current,
+        "previous_month": previous,
+        "income_change_pct": change_pct(
+            current["income"], previous["income"] if previous else None
+        ),
+        "expense_change_pct": change_pct(
+            current["expenses"], previous["expenses"] if previous else None
+        ),
+        "net_change_pct": change_pct(
+            current["net"], previous["net"] if previous else None
+        ),
+        "trend": trend,
+        "category_breakdown": categories,
+    }
