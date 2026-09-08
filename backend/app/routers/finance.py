@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import case, func, select
@@ -96,8 +97,24 @@ async def create_transaction(payload: TransactionCreate, user: User = Depends(ge
 
 
 @router.get("/transactions", response_model=list[TransactionResponse])
-async def list_transactions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[TransactionResponse]:
-    result = await db.execute(select(Transaction).where(Transaction.user_id == user.id).order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc()))
+async def list_transactions(
+    transaction_type: TransactionType | None = None,
+    account_id: uuid.UUID | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[TransactionResponse]:
+    query = select(Transaction).where(Transaction.user_id == user.id)
+    if transaction_type is not None:
+        query = query.where(Transaction.transaction_type == transaction_type)
+    if account_id is not None:
+        query = query.where(Transaction.account_id == account_id)
+    if start_date is not None:
+        query = query.where(Transaction.occurred_on >= start_date)
+    if end_date is not None:
+        query = query.where(Transaction.occurred_on <= end_date)
+    result = await db.execute(query.order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc()))
     return [TransactionResponse.model_validate(row) for row in result.scalars().all()]
 
 
