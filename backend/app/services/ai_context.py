@@ -6,6 +6,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import BillReminder, RecurringRule
+from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
@@ -156,6 +157,24 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         ).all()
     )
 
+    assets = list(
+        (
+            await db.execute(
+                select(
+                    Asset.name,
+                    Asset.asset_type,
+                    Asset.quantity,
+                    Asset.cost_basis,
+                    Asset.current_value,
+                    Asset.maturity_date,
+                )
+                .where(Asset.user_id == user_id)
+                .order_by(Asset.current_value.desc())
+                .limit(30)
+            )
+        ).all()
+    )
+
     return {
         "month": {
             "start": str(start),
@@ -219,5 +238,16 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 "next_due_on": str(next_due_on) if next_due_on else None,
             }
             for name, liability_type, outstanding_principal, interest_rate, emi_amount, next_due_on in liabilities
+        ],
+        "assets": [
+            {
+                "name": name,
+                "asset_type": asset_type,
+                "quantity": str(quantity),
+                "cost_basis": str(cost_basis),
+                "current_value": str(current_value),
+                "maturity_date": str(maturity_date) if maturity_date else None,
+            }
+            for name, asset_type, quantity, cost_basis, current_value, maturity_date in assets
         ],
     }
