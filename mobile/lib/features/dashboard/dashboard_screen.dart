@@ -79,63 +79,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Quick entry',
-                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Record money movement in a few taps.',
-                style: TextStyle(
-                  color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final media = MediaQuery.of(sheetContext);
+        final maxHeight = media.size.height * 0.82;
+
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              18,
+              4,
+              18,
+              18 + media.viewPadding.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Quick entry',
+                  style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.remove_circle_outline),
+                const SizedBox(height: 4),
+                Text(
+                  'Record money movement in a few taps.',
+                  style: TextStyle(
+                    color:
+                        Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                title: const Text('Add expense'),
-                subtitle: const Text('Record spending'),
-                onTap: () => Navigator.pop(sheetContext, 'expense'),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.add_circle_outline),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.remove_circle_outline),
+                  ),
+                  title: const Text('Add expense'),
+                  subtitle: const Text('Record spending'),
+                  onTap: () => Navigator.pop(sheetContext, 'expense'),
                 ),
-                title: const Text('Add income'),
-                subtitle: const Text('Record salary or other income'),
-                onTap: () => Navigator.pop(sheetContext, 'income'),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.swap_horiz_rounded),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.add_circle_outline),
+                  ),
+                  title: const Text('Add income'),
+                  subtitle: const Text('Record salary or other income'),
+                  onTap: () => Navigator.pop(sheetContext, 'income'),
                 ),
-                title: const Text('Transfer money'),
-                subtitle: const Text('Move money between your accounts'),
-                onTap: () => Navigator.pop(sheetContext, 'transfer'),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.account_balance_wallet_outlined),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.swap_horiz_rounded),
+                  ),
+                  title: const Text('Transfer money'),
+                  subtitle: const Text('Move money between your accounts'),
+                  onTap: () => Navigator.pop(sheetContext, 'transfer'),
                 ),
-                title: const Text('Manage accounts'),
-                subtitle: const Text('Bank, cash, card and wallet balances'),
-                onTap: () => Navigator.pop(sheetContext, 'accounts'),
-              ),
-            ],
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.account_balance_wallet_outlined),
+                  ),
+                  title: const Text('Manage accounts'),
+                  subtitle: const Text(
+                    'Bank, cash, card and wallet balances',
+                  ),
+                  onTap: () => Navigator.pop(sheetContext, 'accounts'),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
     if (!mounted || action == null) return;
