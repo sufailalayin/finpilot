@@ -7,7 +7,6 @@ class FinanceService {
 
   Future<Map<String, dynamic>> netWorthSummary() async {
     final response = await _api.dio.get('/finance/net-worth');
-    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
