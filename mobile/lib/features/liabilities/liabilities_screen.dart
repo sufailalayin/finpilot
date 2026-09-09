@@ -198,7 +198,9 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                   emiAmount: emiValue,
                   nextDueOn: due,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save'),
             ),
@@ -207,12 +209,14 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
       ),
     );
 
-    name.dispose();
-    lender.dispose();
-    original.dispose();
-    outstanding.dispose();
-    rate.dispose();
-    emi.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      lender.dispose();
+      original.dispose();
+      outstanding.dispose();
+      rate.dispose();
+      emi.dispose();
+    });
 
     if (saved == true) await _refresh();
   }
@@ -304,7 +308,9 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                   emiAmount: emiValue,
                   nextDueOn: due,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save changes'),
             ),
@@ -313,11 +319,13 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
       ),
     );
 
-    name.dispose();
-    lender.dispose();
-    outstanding.dispose();
-    rate.dispose();
-    emi.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      lender.dispose();
+      outstanding.dispose();
+      rate.dispose();
+      emi.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
@@ -399,7 +407,9 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                 interestComponent: interestValue,
                 paidOn: paidOn,
               );
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
             },
             child: const Text('Record'),
           ),
@@ -407,9 +417,11 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
       ),
     );
 
-    amount.dispose();
-    principal.dispose();
-    interest.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      amount.dispose();
+      principal.dispose();
+      interest.dispose();
+    });
 
     if (saved == true) await _refresh();
   }
