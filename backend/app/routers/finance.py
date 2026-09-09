@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
 from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
@@ -217,6 +217,40 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
             ).where(ReceivableMovement.user_id == user.id)
         )
         movement += receivable_movement or Decimal("0.00")
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user.id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user.id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        movement += (liability_inflow or Decimal("0.00")) - (liability_outflow or Decimal("0.00"))
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user.id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user.id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        movement += (liability_inflow or Decimal("0.00")) - (liability_outflow or Decimal("0.00"))
 
         if account.account_type.value == "card":
             outstanding = account.opening_balance - movement
