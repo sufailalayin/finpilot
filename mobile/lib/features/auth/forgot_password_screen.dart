@@ -153,6 +153,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: _email,
+              autofillHints: const [
+                AutofillHints.username,
+                AutofillHints.email,
+              ],
               keyboardType: TextInputType.emailAddress,
               enabled: !_codeSent,
               decoration: const InputDecoration(
@@ -164,6 +168,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _code,
+                autofillHints: const [AutofillHints.oneTimeCode],
                 keyboardType: TextInputType.number,
                 maxLength: 6,
                 decoration: const InputDecoration(
@@ -175,6 +180,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _password,
+                autofillHints: const [AutofillHints.newPassword],
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   labelText: 'New password',
@@ -192,6 +198,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _confirm,
+                autofillHints: const [AutofillHints.newPassword],
                 obscureText: _obscure,
                 decoration: const InputDecoration(
                   labelText: 'Confirm new password',
