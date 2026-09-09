@@ -144,3 +144,47 @@ class AutomationService {
     _api.notifyDataChanged();
   }
 }
+
+
+extension CreditCardAutomation on AutomationService {
+  Future<void> createCardStatement({
+    required String accountId,
+    required double amount,
+    double? minimumDue,
+    required DateTime generatedOn,
+    required DateTime dueOn,
+    int reminderDaysBefore = 3,
+  }) async {
+    await _api.dio.post(
+      '/automation/cards/statements',
+      data: {
+        'account_id': accountId,
+        'amount': amount,
+        'minimum_due': minimumDue,
+        'generated_on': generatedOn.toIso8601String().split('T').first,
+        'due_on': dueOn.toIso8601String().split('T').first,
+        'reminder_days_before': reminderDaysBefore,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> payCardStatement({
+    required String billId,
+    required String paymentAccountId,
+    required double amount,
+    required DateTime occurredOn,
+    String? note,
+  }) async {
+    await _api.dio.post(
+      '/automation/cards/statements/$billId/pay',
+      data: {
+        'payment_account_id': paymentAccountId,
+        'amount': amount,
+        'occurred_on': occurredOn.toIso8601String().split('T').first,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+      },
+    );
+    _api.notifyDataChanged();
+  }
+}
