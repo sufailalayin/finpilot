@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/app_error_state.dart';
 import '../accounts/accounts_screen.dart';
+import '../accounts/transfer_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
 import '../automation/smart_alerts_screen.dart';
@@ -54,6 +55,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
     if (created == true) await _refresh();
+  }
+
+  Future<void> _openTransfer() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => TransferScreen(api: widget.api),
+      ),
+    );
+    if (saved == true) await _refresh();
+  }
+
+  Future<void> _openAccounts() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AccountsScreen(api: widget.api),
+      ),
+    );
+    if (mounted) await _refresh();
   }
 
   Future<void> _logout() async {
@@ -110,23 +129,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String label,
     required IconData icon,
     required VoidCallback onTap,
+    required double width,
   }) {
-    return Expanded(
+    return SizedBox(
+      width: width,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          constraints: const BoxConstraints(minHeight: 88),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon),
+              Icon(icon, size: 24),
               const SizedBox(height: 8),
               Text(
                 label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -135,6 +164,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _accountBalanceCard(Map<String, dynamic> account) {
+    final balance = double.tryParse(account['balance'].toString()) ?? 0;
+    final type = account['account_type']?.toString() ?? 'account';
+    final prettyType = type.isEmpty
+        ? 'Account'
+        : type[0].toUpperCase() + type.substring(1);
+
+    IconData icon = Icons.account_balance_wallet_outlined;
+    if (type == 'bank') icon = Icons.account_balance_outlined;
+    if (type == 'cash') icon = Icons.payments_outlined;
+    if (type == 'card') icon = Icons.credit_card_outlined;
+    if (type == 'wallet') icon = Icons.wallet_outlined;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            child: Icon(icon, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  account['account_name'].toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  prettyType + ' • ' + account['currency'].toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              _money.format(balance),
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -266,6 +367,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Your balances',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _openAccounts,
+                      child: const Text('Manage'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (data.accounts.isEmpty)
+                  InkWell(
+                    onTap: _openAccounts,
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.add_circle_outline),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Add your first bank, cash or wallet account.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ...data.accounts.map(
+                    (raw) => _accountBalanceCard(
+                      Map<String, dynamic>.from(raw as Map),
+                    ),
+                  ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Fast entry',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ),
+                    Text(
+                      'Daily shortcuts',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final itemWidth = (constraints.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _quickAction(
+                          label: 'Add expense',
+                          icon: Icons.remove_circle_outline,
+                          onTap: () => _openTransaction('expense'),
+                          width: itemWidth,
+                        ),
+                        _quickAction(
+                          label: 'Add income',
+                          icon: Icons.add_circle_outline,
+                          onTap: () => _openTransaction('income'),
+                          width: itemWidth,
+                        ),
+                        _quickAction(
+                          label: 'Transfer',
+                          icon: Icons.swap_horiz_rounded,
+                          onTap: data.accounts.length >= 2
+                              ? _openTransfer
+                              : _openAccounts,
+                          width: itemWidth,
+                        ),
+                        _quickAction(
+                          label: 'Accounts',
+                          icon: Icons.account_balance_wallet_outlined,
+                          onTap: _openAccounts,
+                          width: itemWidth,
+                        ),
+                        _quickAction(
+                          label: 'Planning',
+                          icon: Icons.flag_outlined,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PlanningScreen(api: widget.api),
+                            ),
+                          ),
+                          width: itemWidth,
+                        ),
+                        _quickAction(
+                          label: 'Insights',
+                          icon: Icons.insights_outlined,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => InsightsScreen(api: widget.api),
+                            ),
+                          ),
+                          width: itemWidth,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 22),
                 Text(
                   'Financial position',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -456,138 +685,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  'Quick actions',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _quickAction(
-                      label: 'Expense',
-                      icon: Icons.remove_circle_outline,
-                      onTap: () => _openTransaction('expense'),
-                    ),
-                    const SizedBox(width: 10),
-                    _quickAction(
-                      label: 'Income',
-                      icon: Icons.add_circle_outline,
-                      onTap: () => _openTransaction('income'),
-                    ),
-                    const SizedBox(width: 10),
-                    _quickAction(
-                      label: 'Accounts',
-                      icon: Icons.account_balance_wallet_outlined,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => AccountsScreen(api: widget.api),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _quickAction(
-                      label: 'Insights',
-                      icon: Icons.insights_outlined,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => InsightsScreen(api: widget.api),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Accounts',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => AccountsScreen(api: widget.api),
-                        ),
-                      ),
-                      child: const Text('Manage'),
-                    ),
-                  ],
-                ),
-                if (data.accounts.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'No accounts yet. Add your first bank, cash or wallet account.',
-                    ),
-                  )
-                else
-                  ...data.accounts.map((account) {
-                    final balance =
-                        double.tryParse(account['balance'].toString()) ?? 0;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primaryContainer,
-                            child: const Icon(
-                              Icons.account_balance_wallet_outlined,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  account['account_name'].toString(),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  account['currency'].toString(),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            _money.format(balance),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
                 const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
