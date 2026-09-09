@@ -89,7 +89,9 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
               final value = pin.text.trim();
               if (value.length < 4 || value != confirm.text.trim()) return;
               await _appSecurity.setPin(value);
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(context).pop(true);
             },
             child: const Text('Save'),
           ),
@@ -97,8 +99,10 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
       ),
     );
 
-    pin.dispose();
-    confirm.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      pin.dispose();
+      confirm.dispose();
+    });
 
     if (saved == true) {
       setState(() => _lockEnabled = true);
@@ -211,8 +215,10 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
       }
     }
 
-    password.dispose();
-    phrase.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      password.dispose();
+      phrase.dispose();
+    });
   }
 
   @override
