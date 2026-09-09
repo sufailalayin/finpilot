@@ -7,7 +7,6 @@ class AssetService {
 
   Future<Map<String, dynamic>> overview() async {
     final response = await _api.dio.get('/assets/overview/summary');
-    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
