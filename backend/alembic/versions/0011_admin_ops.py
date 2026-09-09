@@ -32,6 +32,20 @@ def upgrade() -> None:
     )
     op.create_index("ix_billing_plans_code", "billing_plans", ["code"])
 
+    op.add_column(
+        "entitlements",
+        sa.Column("billing_plan_id", postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    op.create_foreign_key(
+        "fk_entitlements_billing_plan_id",
+        "entitlements",
+        "billing_plans",
+        ["billing_plan_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+    op.create_index("ix_entitlements_billing_plan_id", "entitlements", ["billing_plan_id"])
+
     op.create_table(
         "user_locations",
         sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
@@ -75,5 +89,8 @@ def downgrade() -> None:
     op.drop_index("ix_payment_records_user_id", table_name="payment_records")
     op.drop_table("payment_records")
     op.drop_table("user_locations")
+    op.drop_index("ix_entitlements_billing_plan_id", table_name="entitlements")
+    op.drop_constraint("fk_entitlements_billing_plan_id", "entitlements", type_="foreignkey")
+    op.drop_column("entitlements", "billing_plan_id")
     op.drop_index("ix_billing_plans_code", table_name="billing_plans")
     op.drop_table("billing_plans")
