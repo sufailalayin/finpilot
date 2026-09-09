@@ -632,6 +632,174 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
+                if (data.goals.isNotEmpty ||
+                    data.emergencyFund.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Goals & safety net',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PlanningScreen(api: widget.api),
+                          ),
+                        ),
+                        child: const Text('Planning'),
+                      ),
+                    ],
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final emergency = data.emergencyFund;
+                      final months = double.tryParse(
+                        emergency['months_covered']?.toString() ?? '',
+                      );
+                      final monthlyExpense = double.tryParse(
+                            emergency['monthly_expense']?.toString() ?? '0',
+                          ) ??
+                          0;
+                      final liquidBalance = double.tryParse(
+                            emergency['liquid_balance']?.toString() ?? '0',
+                          ) ??
+                          0;
+
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.shield_outlined),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Emergency fund',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    months == null
+                                        ? 'Not enough data'
+                                        : months.toStringAsFixed(1) + ' mo',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                months == null
+                                    ? 'Add monthly expenses to calculate how many months your liquid balance can cover.'
+                                    : 'Liquid balance ' +
+                                        _money.format(liquidBalance) +
+                                        ' against monthly expenses ' +
+                                        _money.format(monthlyExpense) +
+                                        '.',
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (months != null) ...[
+                                const SizedBox(height: 10),
+                                LinearProgressIndicator(
+                                  value: (months / 6).clamp(0.0, 1.0),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  months >= 6
+                                      ? 'Strong emergency buffer.'
+                                      : months >= 3
+                                          ? 'Good progress toward a 6-month buffer.'
+                                          : 'Aim to build toward at least 3–6 months of expenses.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (data.goals.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    ...data.goals.take(2).map((raw) {
+                      final goal = Map<String, dynamic>.from(raw as Map);
+                      final current = double.tryParse(
+                            goal['current_amount'].toString(),
+                          ) ??
+                          0;
+                      final target = double.tryParse(
+                            goal['target_amount'].toString(),
+                          ) ??
+                          0;
+                      final progress = double.tryParse(
+                            goal['progress_pct'].toString(),
+                          ) ??
+                          0;
+
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.flag_outlined),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      goal['name'].toString(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    progress.toStringAsFixed(0) + '%',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              LinearProgressIndicator(
+                                value: (progress / 100).clamp(0.0, 1.0),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _money.format(current) +
+                                    ' of ' +
+                                    _money.format(target),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ],
                 if (data.upcomingBills.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Row(
