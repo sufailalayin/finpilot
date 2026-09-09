@@ -31,6 +31,8 @@ jobs:
     env:
       FINPILOT_DATABASE_URL: postgresql+asyncpg://finpilot:finpilot_dev@localhost:5432/finpilot
       FINPILOT_JWT_SECRET: ci-only-secret
+      FINPILOT_ENVIRONMENT: test
+      FINPILOT_OTP_TEST_CODE: "123456"
 
     steps:
       - uses: actions/checkout@v4
