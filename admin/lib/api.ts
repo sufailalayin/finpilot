@@ -38,6 +38,7 @@ export const updateAdminUser = (
   payload: {
     user_status?: string;
     plan_code?: string;
+    billing_plan_id?: string;
     entitlement_status?: string;
     trial_ends_at?: string | null;
     paid_until?: string | null;
@@ -64,3 +65,30 @@ export const sendAdminTestEmail = () =>
 
 
 export const fetchSystemReadiness = () => apiGet("/ready");
+
+export const fetchBillingPlans = () => apiGet("/admin/plans");
+export const createBillingPlan = (payload: unknown) =>
+  apiRequest("/admin/plans", { method: "POST", body: JSON.stringify(payload) });
+
+export const fetchPayments = (userId = "") =>
+  apiGet("/admin/payments" + (userId ? "?user_id=" + encodeURIComponent(userId) : ""));
+export const recordPayment = (payload: unknown) =>
+  apiRequest("/admin/payments", { method: "POST", body: JSON.stringify(payload) });
+
+export const fetchAdminUserDetail = (userId: string) =>
+  apiGet("/admin/users/" + encodeURIComponent(userId) + "/detail");
+
+export const updateAdminUserLocation = (
+  userId: string,
+  payload: { country?: string | null; state?: string | null; city?: string | null; postal_code?: string | null; reason: string },
+) =>
+  apiRequest("/admin/users/" + encodeURIComponent(userId) + "/location", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+
+export const deleteAdminUser = (userId: string, reason: string) =>
+  apiRequest("/admin/users/" + encodeURIComponent(userId) + "/delete", {
+    method: "POST",
+    body: JSON.stringify({ reason, confirmation: "DELETE" }),
+  });

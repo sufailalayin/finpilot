@@ -13,7 +13,16 @@ from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
-from app.models.user import AuthOtpChallenge, Entitlement, SecurityAuditEvent, User
+from app.models.user import (
+    AdminActionLog,
+    AuthOtpChallenge,
+    BillingPlan,
+    Entitlement,
+    PaymentRecord,
+    SecurityAuditEvent,
+    User,
+    UserLocation,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

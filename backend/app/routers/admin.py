@@ -12,21 +12,31 @@ from app.models.finance import FinanceAccount, Transaction
 from app.models.liability import Liability
 from app.models.user import (
     AdminActionLog,
+    BillingPlan,
     Entitlement,
     EntitlementStatus,
+    PaymentRecord,
     PlanCode,
     SecurityAuditEvent,
     User,
+    UserLocation,
     UserStatus,
 )
 from app.services.subscriptions import apply_manual_plan_change
 from app.services.email_delivery import EmailDeliveryError, send_test_email
 from app.schemas.admin import (
     AdminActionLogRow,
+    AdminBillingPlanCreate,
+    AdminBillingPlanRow,
+    AdminDeleteUserRequest,
     AdminAIUsageSummary,
     AdminOverview,
+    AdminPaymentCreate,
+    AdminPaymentRow,
     AdminSecurityEventRow,
     AdminSubscriptionSummary,
+    AdminUserDetail,
+    AdminUserLocationUpdate,
     AdminUserRow,
     AdminUserUpdate,
 )
@@ -150,6 +160,8 @@ async def users(
             email_verified=user.email_verified,
             entitlement_status=entitlement.status.value if entitlement else None,
             plan_code=entitlement.plan_code.value if entitlement else None,
+            billing_plan_id=str(entitlement.billing_plan_id) if entitlement and entitlement.billing_plan_id else None,
+            billing_plan_name=billing_plan.name if billing_plan else None,
             trial_ends_at=entitlement.trial_ends_at if entitlement else None,
             paid_until=entitlement.paid_until if entitlement else None,
             created_at=user.created_at,
@@ -302,6 +314,7 @@ async def update_user(
         value is not None
         for value in (
             payload.plan_code,
+            payload.billing_plan_id,
             payload.entitlement_status,
             payload.trial_ends_at,
             payload.paid_until,
@@ -493,3 +506,385 @@ async def test_email_delivery(
     )
     await db.commit()
     return {"status": "sent", "recipient": admin.email}
+
+
+@router.get("/plans", response_model=list[AdminBillingPlanRow])
+async def list_billing_plans(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminBillingPlanRow]:
+    rows = (await db.execute(select(BillingPlan).order_by(BillingPlan.created_at.desc()))).scalars().all()
+    return [
+        AdminBillingPlanRow(
+            id=str(plan.id),
+            code=plan.code,
+            name=plan.name,
+            access_level=plan.access_level,
+            billing_period=plan.billing_period,
+            price=plan.price,
+            currency=plan.currency,
+            description=plan.description,
+            features=plan.features,
+            is_active=plan.is_active,
+            created_at=plan.created_at,
+            updated_at=plan.updated_at,
+        )
+        for plan in rows
+    ]
+
+
+@router.post("/plans", response_model=AdminBillingPlanRow, status_code=201)
+async def create_billing_plan(
+    payload: AdminBillingPlanCreate,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminBillingPlanRow:
+    existing = await db.scalar(select(BillingPlan.id).where(BillingPlan.code == payload.code.lower()))
+    if existing:
+        raise HTTPException(status_code=409, detail="Plan code already exists")
+
+    plan = BillingPlan(
+        code=payload.code.lower(),
+        name=payload.name.strip(),
+        access_level=payload.access_level,
+        billing_period=payload.billing_period,
+        price=payload.price,
+        currency=payload.currency.upper(),
+        description=payload.description.strip() if payload.description else None,
+        features=payload.features,
+        is_active=payload.is_active,
+    )
+    db.add(plan)
+    await db.flush()
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=None,
+            action="billing_plan_created",
+            reason="Created billing plan",
+            before_state=None,
+            after_state={
+                "id": str(plan.id),
+                "code": plan.code,
+                "name": plan.name,
+                "access_level": plan.access_level,
+                "billing_period": plan.billing_period,
+                "price": str(plan.price),
+                "currency": plan.currency,
+            },
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    await db.refresh(plan)
+    return AdminBillingPlanRow(
+        id=str(plan.id),
+        code=plan.code,
+        name=plan.name,
+        access_level=plan.access_level,
+        billing_period=plan.billing_period,
+        price=plan.price,
+        currency=plan.currency,
+        description=plan.description,
+        features=plan.features,
+        is_active=plan.is_active,
+        created_at=plan.created_at,
+        updated_at=plan.updated_at,
+    )
+
+
+@router.get("/payments", response_model=list[AdminPaymentRow])
+async def list_payments(
+    user_id: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminPaymentRow]:
+    recorder = User.__table__.alias("recorder")
+    user_table = User.__table__.alias("payment_user")
+    plan = BillingPlan.__table__.alias("payment_plan")
+    statement = (
+        select(
+            PaymentRecord,
+            user_table.c.email.label("user_email"),
+            plan.c.name.label("plan_name"),
+            recorder.c.email.label("recorder_email"),
+        )
+        .join(user_table, user_table.c.id == PaymentRecord.user_id)
+        .outerjoin(plan, plan.c.id == PaymentRecord.billing_plan_id)
+        .outerjoin(recorder, recorder.c.id == PaymentRecord.recorded_by_admin_id)
+        .order_by(PaymentRecord.received_at.desc())
+        .limit(limit)
+    )
+    if user_id:
+        import uuid
+        try:
+            uid = uuid.UUID(user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid user id") from exc
+        statement = statement.where(PaymentRecord.user_id == uid)
+
+    rows = await db.execute(statement)
+    return [
+        AdminPaymentRow(
+            id=str(payment.id),
+            user_id=str(payment.user_id),
+            user_email=user_email,
+            billing_plan_id=str(payment.billing_plan_id) if payment.billing_plan_id else None,
+            billing_plan_name=plan_name,
+            amount=payment.amount,
+            currency=payment.currency,
+            payment_method=payment.payment_method,
+            provider=payment.provider,
+            reference=payment.reference,
+            status=payment.status,
+            notes=payment.notes,
+            received_at=payment.received_at,
+            recorded_by_admin_email=recorder_email,
+            created_at=payment.created_at,
+        )
+        for payment, user_email, plan_name, recorder_email in rows.all()
+    ]
+
+
+@router.post("/payments", response_model=AdminPaymentRow, status_code=201)
+async def record_payment(
+    payload: AdminPaymentCreate,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminPaymentRow:
+    import uuid
+
+    try:
+        uid = uuid.UUID(payload.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+
+    user = await db.scalar(select(User).where(User.id == uid))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    plan = None
+    plan_id = None
+    if payload.billing_plan_id:
+        try:
+            plan_id = uuid.UUID(payload.billing_plan_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid billing plan id") from exc
+        plan = await db.scalar(select(BillingPlan).where(BillingPlan.id == plan_id))
+        if not plan:
+            raise HTTPException(status_code=404, detail="Billing plan not found")
+
+    payment = PaymentRecord(
+        user_id=user.id,
+        billing_plan_id=plan_id,
+        amount=payload.amount,
+        currency=payload.currency.upper(),
+        payment_method=payload.payment_method.strip(),
+        provider=payload.provider.strip() if payload.provider else None,
+        reference=payload.reference.strip() if payload.reference else None,
+        status=payload.status,
+        notes=payload.notes.strip() if payload.notes else None,
+        received_at=payload.received_at,
+        recorded_by_admin_id=admin.id,
+    )
+    db.add(payment)
+    await db.flush()
+
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=user.id,
+            action="payment_recorded",
+            reason=payload.reason.strip(),
+            before_state=None,
+            after_state={
+                "payment_id": str(payment.id),
+                "amount": str(payment.amount),
+                "currency": payment.currency,
+                "method": payment.payment_method,
+                "status": payment.status,
+                "reference": payment.reference,
+                "billing_plan_id": str(plan_id) if plan_id else None,
+            },
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    await db.refresh(payment)
+
+    return AdminPaymentRow(
+        id=str(payment.id),
+        user_id=str(user.id),
+        user_email=user.email,
+        billing_plan_id=str(plan.id) if plan else None,
+        billing_plan_name=plan.name if plan else None,
+        amount=payment.amount,
+        currency=payment.currency,
+        payment_method=payment.payment_method,
+        provider=payment.provider,
+        reference=payment.reference,
+        status=payment.status,
+        notes=payment.notes,
+        received_at=payment.received_at,
+        recorded_by_admin_email=admin.email,
+        created_at=payment.created_at,
+    )
+
+
+@router.get("/users/{user_id}/detail", response_model=AdminUserDetail)
+async def user_detail(
+    user_id: str,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminUserDetail:
+    import uuid
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+
+    row = (await db.execute(
+        select(User, Entitlement, UserLocation, BillingPlan)
+        .outerjoin(Entitlement, Entitlement.user_id == User.id)
+        .outerjoin(UserLocation, UserLocation.user_id == User.id)
+        .outerjoin(BillingPlan, BillingPlan.id == Entitlement.billing_plan_id)
+        .where(User.id == uid)
+    )).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    user, entitlement, location, billing_plan = row
+    payments = await list_payments(user_id=str(user.id), limit=50, _=user, db=db)
+    return AdminUserDetail(
+        user=AdminUserRow(
+            id=str(user.id),
+            email=user.email,
+            full_name=user.full_name,
+            email_verified=user.email_verified,
+            user_status=user.status.value,
+            is_admin=user.is_admin,
+            entitlement_status=entitlement.status.value if entitlement else None,
+            plan_code=entitlement.plan_code.value if entitlement else None,
+            trial_ends_at=entitlement.trial_ends_at if entitlement else None,
+            paid_until=entitlement.paid_until if entitlement else None,
+            created_at=user.created_at,
+        ),
+        country=location.country if location else None,
+        state=location.state if location else None,
+        city=location.city if location else None,
+        postal_code=location.postal_code if location else None,
+        last_ip_address=location.last_ip_address if location else None,
+        last_user_agent=location.last_user_agent if location else None,
+        location_updated_at=location.updated_at if location else None,
+        payments=payments,
+    )
+
+
+@router.patch("/users/{user_id}/location")
+async def update_user_location(
+    user_id: str,
+    payload: AdminUserLocationUpdate,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    import uuid
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+
+    user = await db.scalar(select(User).where(User.id == uid))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    location = await db.scalar(select(UserLocation).where(UserLocation.user_id == uid))
+    before = {
+        "country": location.country if location else None,
+        "state": location.state if location else None,
+        "city": location.city if location else None,
+        "postal_code": location.postal_code if location else None,
+    }
+    if not location:
+        location = UserLocation(user_id=uid)
+        db.add(location)
+    location.country = payload.country.strip() if payload.country else None
+    location.state = payload.state.strip() if payload.state else None
+    location.city = payload.city.strip() if payload.city else None
+    location.postal_code = payload.postal_code.strip() if payload.postal_code else None
+
+    after = {
+        "country": location.country,
+        "state": location.state,
+        "city": location.city,
+        "postal_code": location.postal_code,
+    }
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=uid,
+            action="user_location_updated",
+            reason=payload.reason.strip(),
+            before_state=before,
+            after_state=after,
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/users/{user_id}/delete")
+async def delete_user_account(
+    user_id: str,
+    payload: AdminDeleteUserRequest,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    import uuid
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+
+    user = await db.scalar(select(User).where(User.id == uid))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="Another admin account cannot be deleted here")
+
+    before = {"status": user.status.value, "token_version": user.token_version}
+    user.status = UserStatus.DELETED
+    user.token_version += 1
+    after = {"status": user.status.value, "token_version": user.token_version}
+
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=user.id,
+            action="user_deleted",
+            reason=payload.reason.strip(),
+            before_state=before,
+            after_state=after,
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="account_deleted_by_admin",
+            description=f"Account disabled/deleted by administrator. Reason: {payload.reason.strip()}",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    return {"status": "deleted"}
