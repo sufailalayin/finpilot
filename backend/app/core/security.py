@@ -25,13 +25,21 @@ def create_access_token(subject: str, token_version: int = 0) -> str:
         "exp": now + timedelta(minutes=settings.access_token_minutes),
         "type": "access",
         "ver": token_version,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> str | None:
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
     except JWTError:
         return None
     if payload.get("type") != "access":
@@ -47,6 +55,8 @@ def decode_access_token_claims(token: str) -> dict | None:
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
     except JWTError:
         return None
