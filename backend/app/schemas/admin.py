@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminOverview(BaseModel):
@@ -52,6 +52,30 @@ class AdminSecurityEventRow(BaseModel):
     user_email: str | None
     event_type: str
     description: str | None
+    ip_address: str | None
+    user_agent: str | None
+    created_at: datetime
+
+
+class AdminUserUpdate(BaseModel):
+    user_status: str | None = None
+    plan_code: str | None = None
+    entitlement_status: str | None = None
+    trial_ends_at: datetime | None = None
+    paid_until: datetime | None = None
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class AdminActionLogRow(BaseModel):
+    id: str
+    actor_admin_id: str | None
+    actor_admin_email: str | None
+    target_user_id: str | None
+    target_user_email: str | None
+    action: str
+    reason: str
+    before_state: dict | None
+    after_state: dict | None
     ip_address: str | None
     user_agent: str | None
     created_at: datetime
