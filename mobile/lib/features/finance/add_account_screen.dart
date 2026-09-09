@@ -36,20 +36,25 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     });
 
     try {
-      final saved = await _finance.createAccount(
+      await _finance.createAccount(
         name: name,
         accountType: _accountType,
         openingBalance: opening,
       );
       if (!mounted) return;
-      final savedName = saved['name']?.toString() ?? name;
+
+      // Remove focus/keyboard dependencies before this route is disposed.
+      FocusManager.instance.primaryFocus?.unfocus();
+
+      // Let the parent route refresh and show any success feedback. Do not
+      // access inherited widgets such as ScaffoldMessenger after popping
+      // this route; doing so during disposal can trigger Flutter's
+      // _dependents.isEmpty assertion on some Android devices.
       Navigator.of(context).pop(true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account saved: ' + savedName)),
-      );
     } catch (_) {
-      setState(() => _error = 'Unable to create account.');
+      if (mounted) {
+        setState(() => _error = 'Unable to create account.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
