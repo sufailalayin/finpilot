@@ -16,6 +16,18 @@ class RecurringRuleCreate(BaseModel):
     next_due_on: date
 
 
+class RecurringRuleUpdate(BaseModel):
+    account_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    transaction_type: str | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    frequency: str | None = None
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    next_due_on: date | None = None
+    is_active: bool | None = None
+
+
 class RecurringRuleResponse(RecurringRuleCreate):
     id: uuid.UUID
     is_active: bool
@@ -32,6 +44,18 @@ class BillCreate(BaseModel):
     frequency: str = "once"
     reminder_days_before: int = Field(default=3, ge=0, le=30)
     auto_renew: bool = False
+
+
+class BillUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    bill_type: str | None = Field(default=None, max_length=30)
+    provider: str | None = Field(default=None, max_length=120)
+    amount: Decimal | None = Field(default=None, gt=0)
+    due_on: date | None = None
+    frequency: str | None = None
+    reminder_days_before: int | None = Field(default=None, ge=0, le=30)
+    auto_renew: bool | None = None
+    is_paid: bool | None = None
 
 
 class BillResponse(BillCreate):
