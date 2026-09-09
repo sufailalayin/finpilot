@@ -17,21 +17,69 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
+  late int _revision;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _revision = widget.api.dataRevision.value;
+    widget.api.dataRevision.addListener(_handleRevision);
+    widget.api.sessionExpired.addListener(_handleSessionExpired);
+  }
+
+  void _handleRevision() {
+    if (!mounted) return;
+    setState(() => _revision = widget.api.dataRevision.value);
+  }
+
+  void _handleSessionExpired() {
+    if (!mounted || widget.api.sessionExpired.value != true) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.api.notifyDataChanged();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.api.dataRevision.removeListener(_handleRevision);
+    widget.api.sessionExpired.removeListener(_handleSessionExpired);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      DashboardScreen(api: widget.api),
-      TransactionsScreen(api: widget.api),
-      PlanningScreen(api: widget.api),
+      DashboardScreen(
+        key: ValueKey('dashboard-$_revision'),
+        api: widget.api,
+      ),
+      TransactionsScreen(
+        key: ValueKey('transactions-$_revision'),
+        api: widget.api,
+      ),
+      PlanningScreen(
+        key: ValueKey('planning-$_revision'),
+        api: widget.api,
+      ),
       ProFeatureGate(
+        key: ValueKey('ai-$_revision'),
         api: widget.api,
         featureCode: 'ai_copilot',
         child: AIScreen(api: widget.api),
       ),
-      ProfileScreen(api: widget.api),
+      ProfileScreen(
+        key: ValueKey('profile-$_revision'),
+        api: widget.api,
+      ),
     ];
 
     return Scaffold(
@@ -41,7 +89,13 @@ class _AppShellState extends State<AppShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: (value) {
+          if (value == _index) {
+            widget.api.notifyDataChanged();
+          } else {
+            setState(() => _index = value);
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
