@@ -53,6 +53,14 @@ async def create_movement(
 ) -> ReceivableMovementResponse:
     if payload.source_type == payload.destination_type == "outside":
         raise HTTPException(status_code=400, detail="Outside to outside movement is not tracked")
+    if payload.source_type != "person" and payload.destination_type != "person":
+        raise HTTPException(status_code=400, detail="At least one side must be a person")
+    if (
+        payload.source_type == "person"
+        and payload.destination_type == "person"
+        and payload.source_receivable_id == payload.destination_receivable_id
+    ):
+        raise HTTPException(status_code=400, detail="Source and destination person must be different")
     if payload.source_type == "account" and payload.source_account_id is None:
         raise HTTPException(status_code=400, detail="Source account is required")
     if payload.destination_type == "account" and payload.destination_account_id is None:
