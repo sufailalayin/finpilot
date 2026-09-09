@@ -22,6 +22,8 @@ class DashboardData {
     required this.insights,
     required this.alerts,
     required this.upcomingBills,
+    required this.goals,
+    required this.emergencyFund,
   });
 
   final double totalBalance;
@@ -44,6 +46,8 @@ class DashboardData {
   final List<dynamic> insights;
   final List<dynamic> alerts;
   final List<dynamic> upcomingBills;
+  final List<dynamic> goals;
+  final Map<String, dynamic> emergencyFund;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] is Map
@@ -83,6 +87,10 @@ class DashboardData {
       insights: (json['insights'] as List<dynamic>?) ?? const [],
       alerts: (json['alerts'] as List<dynamic>?) ?? const [],
       upcomingBills: (json['upcoming_bills'] as List<dynamic>?) ?? const [],
+      goals: (json['goals'] as List<dynamic>?) ?? const [],
+      emergencyFund: json['emergency_fund'] is Map
+          ? Map<String, dynamic>.from(json['emergency_fund'] as Map)
+          : <String, dynamic>{},
     );
   }
 }
