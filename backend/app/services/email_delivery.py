@@ -78,6 +78,10 @@ async def send_otp_email(
     mode = settings.email_delivery_mode.lower()
 
     if mode == "log":
+        if settings.environment == "production":
+            raise EmailDeliveryError(
+                "OTP email delivery is not configured in production"
+            )
         logger.warning(
             "FINPILOT OTP delivery mode=log recipient=%s purpose=%s code=%s",
             to_email,
