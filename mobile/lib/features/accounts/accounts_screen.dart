@@ -307,6 +307,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           account['opening_balance'].toString(),
                         ) ??
                         0;
+                    final isCard = account['account_type'].toString() == 'card';
+                    final availableCredit = double.tryParse(
+                          account['available_credit']?.toString() ?? '',
+                        );
+                    final utilization = double.tryParse(
+                          account['utilization_pct']?.toString() ?? '',
+                        );
+                    final last4 = account['card_last4']?.toString();
 
                     return Card(
                       child: ListTile(
@@ -318,9 +326,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         subtitle: Text(
-                          account['account_type'].toString() +
-                              ' • Opening ' +
-                              _money.format(opening),
+                          isCard
+                              ? [
+                                  if (last4 != null && last4.isNotEmpty)
+                                    '•••• ' + last4,
+                                  'Outstanding ' + _money.format(current),
+                                  if (availableCredit != null)
+                                    'Available ' + _money.format(availableCredit),
+                                  if (utilization != null)
+                                    utilization.toStringAsFixed(0) + '% used',
+                                ].join(' • ')
+                              : account['account_type'].toString() +
+                                  ' • Opening ' +
+                                  _money.format(opening),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -328,7 +346,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 110),
                               child: Text(
-                                _money.format(current),
+                                isCard
+                                    ? _money.format(current) + ' due'
+                                    : _money.format(current),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
