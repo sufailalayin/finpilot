@@ -14,6 +14,7 @@ class AdminOverview(BaseModel):
     assets: int
     liabilities: int
     security_events_24h: int
+    unverified_users: int
 
 
 class AdminUserRow(BaseModel):
@@ -22,6 +23,7 @@ class AdminUserRow(BaseModel):
     full_name: str | None
     user_status: str
     is_admin: bool
+    email_verified: bool
     entitlement_status: str | None
     plan_code: str | None
     trial_ends_at: datetime | None
