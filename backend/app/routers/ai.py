@@ -27,7 +27,13 @@ async def ask_finpilot(
 
     context = await build_finance_context(db, user.id)
     provider = get_ai_provider()
-    answer = await provider.answer(payload.question, context)
+    try:
+        answer = await provider.answer(payload.question, context)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
     db.add(
         AIUsageEvent(
@@ -67,7 +73,13 @@ async def copilot_brief(
         "identify the three most important risks or opportunities, and give me three "
         "specific actions for the next 30 days. Use only my recorded data."
     )
-    answer = await provider.answer(prompt, context)
+    try:
+        answer = await provider.answer(prompt, context)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
     db.add(
         AIUsageEvent(
