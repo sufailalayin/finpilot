@@ -37,6 +37,31 @@ class LiabilityService {
     _api.notifyDataChanged();
   }
 
+  Future<void> updateLiability({
+    required String liabilityId,
+    required String name,
+    required String liabilityType,
+    String? lender,
+    required double outstandingPrincipal,
+    required double interestRate,
+    required double emiAmount,
+    DateTime? nextDueOn,
+  }) async {
+    await _api.dio.patch(
+      '/liabilities/$liabilityId',
+      data: {
+        'name': name.trim(),
+        'liability_type': liabilityType,
+        'lender': lender?.trim().isEmpty == true ? null : lender?.trim(),
+        'outstanding_principal': outstandingPrincipal,
+        'interest_rate': interestRate,
+        'emi_amount': emiAmount,
+        'next_due_on': nextDueOn?.toIso8601String().split('T').first,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
   Future<void> recordPayment({
     required String liabilityId,
     required double amount,
