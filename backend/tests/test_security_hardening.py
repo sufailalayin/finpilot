@@ -5,6 +5,7 @@ import pytest
 
 from app.core.config import Settings
 from app.core.production import ProductionConfigError, validate_production_settings
+from app.core.security import create_access_token, decode_access_token_claims
 from app.models.user import User, UserStatus
 from app.routers.security_privacy import _export_profile
 from app.services.login_security import (
@@ -105,3 +106,23 @@ def test_expired_login_lock_is_not_active():
         login_locked_until=now - timedelta(seconds=1),
     )
     assert lock_seconds_remaining(user, now=now) == 0
+
+
+
+def test_admin_mfa_claim_is_cryptographically_bound_to_token():
+    token = create_access_token(
+        str(uuid4()),
+        token_version=4,
+        admin_mfa=True,
+    )
+    claims = decode_access_token_claims(token)
+    assert claims is not None
+    assert claims["ver"] == 4
+    assert claims["admin_mfa"] is True
+
+
+def test_normal_access_token_does_not_gain_admin_mfa():
+    token = create_access_token(str(uuid4()), token_version=1)
+    claims = decode_access_token_claims(token)
+    assert claims is not None
+    assert claims["admin_mfa"] is False
