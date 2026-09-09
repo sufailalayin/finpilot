@@ -20,6 +20,8 @@ import {
   sendAdminTestEmail,
   updateAdminUser,
   updateAdminUserLocation,
+  fetchAppRelease,
+  updateAppRelease,
 } from "../lib/api";
 
 type Overview = {
@@ -158,7 +160,20 @@ type Section =
   | "subscriptions"
   | "ai"
   | "security"
+  | "release"
   | "logs";
+
+type AppRelease = {
+  latest_version: string;
+  latest_build_number: number;
+  minimum_version: string;
+  minimum_build_number: number;
+  update_url: string | null;
+  release_notes: string | null;
+  distribution: "apk" | "play_store";
+  is_update_enabled: boolean;
+  updated_at: string;
+};
 
 const nav: { key: Section; label: string; hint: string }[] = [
   { key: "overview", label: "Overview", hint: "Command center" },
@@ -168,6 +183,7 @@ const nav: { key: Section; label: string; hint: string }[] = [
   { key: "subscriptions", label: "Subscriptions", hint: "Access" },
   { key: "ai", label: "AI Usage", hint: "Consumption" },
   { key: "security", label: "Security", hint: "Login activity" },
+  { key: "release", label: "App Release", hint: "Updates" },
   { key: "logs", label: "Admin Logs", hint: "Changes" },
 ];
 
@@ -207,6 +223,7 @@ export default function AdminDashboard() {
   const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [appRelease, setAppRelease] = useState<AppRelease | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -228,6 +245,7 @@ export default function AdminDashboard() {
         fetchSystemReadiness(),
         fetchBillingPlans(),
         fetchPayments(),
+        fetchAppRelease(),
       ]);
       setOverview(data[0]);
       setUsers(data[1]);
@@ -238,6 +256,7 @@ export default function AdminDashboard() {
       setReadiness(data[6]);
       setPlans(data[7]);
       setPayments(data[8]);
+      setAppRelease(data[9]);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load admin data";
       if (message === "ADMIN_SESSION_EXPIRED") {
@@ -326,6 +345,7 @@ export default function AdminDashboard() {
               {section === "subscriptions" && "Monitor free, trial, active, expired and cancelled access."}
               {section === "ai" && "Track FinPilot AI usage."}
               {section === "security" && "Review sign-ins, IP addresses and device information."}
+              {section === "release" && "Control optional and required FinPilot mobile updates."}
               {section === "logs" && "Permanent audit trail of administrator changes."}
             </p>
           </div>
@@ -501,6 +521,16 @@ export default function AdminDashboard() {
           </section>
         )}
 
+        {section === "release" && (
+          <AppReleasePanel
+            release={appRelease}
+            onSaved={async () => {
+              const latest = await fetchAppRelease();
+              setAppRelease(latest);
+            }}
+          />
+        )}
+
         {section === "logs" && (
           <section className="section">
             <div className="section-header"><div><h2>Admin action logs</h2><p>Who changed what, when and why.</p></div></div>
@@ -527,6 +557,89 @@ export default function AdminDashboard() {
         {showPaymentModal && <RecordPaymentModal users={users} plans={plans} onClose={() => setShowPaymentModal(false)} onSaved={async () => { setShowPaymentModal(false); await load(); }} />}
       </section>
     </main>
+  );
+}
+
+
+function AppReleasePanel({ release, onSaved }: { release: AppRelease | null; onSaved: () => Promise<void> }) {
+  const [latestVersion, setLatestVersion] = useState(release?.latest_version ?? "1.0.0");
+  const [latestBuild, setLatestBuild] = useState(String(release?.latest_build_number ?? 1));
+  const [minimumVersion, setMinimumVersion] = useState(release?.minimum_version ?? "1.0.0");
+  const [minimumBuild, setMinimumBuild] = useState(String(release?.minimum_build_number ?? 1));
+  const [updateUrl, setUpdateUrl] = useState(release?.update_url ?? "");
+  const [notes, setNotes] = useState(release?.release_notes ?? "");
+  const [distribution, setDistribution] = useState<"apk" | "play_store">(release?.distribution ?? "apk");
+  const [enabled, setEnabled] = useState(release?.is_update_enabled ?? true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!release) return;
+    setLatestVersion(release.latest_version);
+    setLatestBuild(String(release.latest_build_number));
+    setMinimumVersion(release.minimum_version);
+    setMinimumBuild(String(release.minimum_build_number));
+    setUpdateUrl(release.update_url ?? "");
+    setNotes(release.release_notes ?? "");
+    setDistribution(release.distribution);
+    setEnabled(release.is_update_enabled);
+  }, [release]);
+
+  async function save() {
+    const latest = Number(latestBuild);
+    const minimum = Number(minimumBuild);
+    if (!Number.isInteger(latest) || !Number.isInteger(minimum) || latest < 1 || minimum < 1) {
+      return setMessage("Build numbers must be positive whole numbers.");
+    }
+    if (minimum > latest) return setMessage("Minimum supported build cannot exceed latest build.");
+
+    setSaving(true);
+    setMessage("");
+    try {
+      await updateAppRelease({
+        latest_version: latestVersion.trim(),
+        latest_build_number: latest,
+        minimum_version: minimumVersion.trim(),
+        minimum_build_number: minimum,
+        update_url: updateUrl.trim() || null,
+        release_notes: notes.trim() || null,
+        distribution,
+        is_update_enabled: enabled,
+      });
+      await onSaved();
+      setMessage("Release settings saved.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to save release settings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="section">
+      <div className="section-header">
+        <div><h2>Mobile app updates</h2><p>Publish optional updates or require unsupported builds to upgrade.</p></div>
+        <span className={enabled ? "badge good" : "badge warn"}>{enabled ? "Update checks enabled" : "Disabled"}</span>
+      </div>
+      <div className="card panel">
+        <div className="control-grid">
+          <label className="field"><span>Latest version</span><input value={latestVersion} onChange={(e) => setLatestVersion(e.target.value)} placeholder="1.0.1" /></label>
+          <label className="field"><span>Latest build number</span><input type="number" min="1" value={latestBuild} onChange={(e) => setLatestBuild(e.target.value)} /></label>
+          <label className="field"><span>Minimum supported version</span><input value={minimumVersion} onChange={(e) => setMinimumVersion(e.target.value)} placeholder="1.0.0" /></label>
+          <label className="field"><span>Minimum supported build</span><input type="number" min="1" value={minimumBuild} onChange={(e) => setMinimumBuild(e.target.value)} /></label>
+          <label className="field"><span>Distribution</span><select value={distribution} onChange={(e) => setDistribution(e.target.value as "apk" | "play_store")}><option value="apk">APK / web link</option><option value="play_store">Google Play</option></select></label>
+          <label className="field"><span>Update URL</span><input value={updateUrl} onChange={(e) => setUpdateUrl(e.target.value)} placeholder="https://..." /></label>
+        </div>
+        <label className="field"><span>Release notes</span><textarea rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What changed in this version..." /></label>
+        <label className="field" style={{ marginTop: 12 }}><span>Update checking</span><select value={enabled ? "enabled" : "disabled"} onChange={(e) => setEnabled(e.target.value === "enabled")}><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
+        <div className="card" style={{ marginTop: 16, padding: 16 }}>
+          <strong>How forcing works</strong>
+          <p style={{ marginBottom: 0 }}>Builds below <strong>{minimumBuild || "—"}</strong> are blocked until updated. Builds between minimum and latest get an optional “Update now / Later” prompt.</p>
+        </div>
+        {message && <div className="error" style={{ marginTop: 12 }}>{message}</div>}
+        <button className="btn primary detail-save" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save release settings"}</button>
+      </div>
+    </section>
   );
 }
 
