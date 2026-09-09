@@ -69,8 +69,8 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF185A4A),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
+        colorSchemeSeed: const Color(0xFF124D40),
+        scaffoldBackgroundColor: const Color(0xFFF3F6F5),
         appBarTheme: const AppBarTheme(
           centerTitle: false,
           elevation: 0,
