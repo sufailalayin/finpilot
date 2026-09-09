@@ -133,6 +133,40 @@ async def list_recurring(
     return [RecurringRuleResponse.model_validate(row) for row in result.scalars().all()]
 
 
+@router.get("/cards/{account_id}/statements", response_model=list[BillResponse])
+async def list_credit_card_statements(
+    account_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[BillResponse]:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    if account is None or account.account_type.value != "card":
+        raise HTTPException(status_code=404, detail="Credit card account not found")
+
+    rows = list(
+        (
+            await db.execute(
+                select(BillReminder)
+                .where(
+                    BillReminder.user_id == user.id,
+                    BillReminder.account_id == account.id,
+                    BillReminder.bill_type == "credit_card",
+                )
+                .order_by(
+                    BillReminder.bill_generated_on.desc().nullslast(),
+                    BillReminder.created_at.desc(),
+                )
+            )
+        ).scalars().all()
+    )
+    return [BillResponse.model_validate(row) for row in rows]
+
+
 @router.post("/cards/statements", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
 async def create_credit_card_statement(
     payload: CreditCardStatementCreate,
