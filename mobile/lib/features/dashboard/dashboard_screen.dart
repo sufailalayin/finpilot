@@ -179,9 +179,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 14),
             Text(
               value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
+                height: 1.1,
               ),
             ),
             const SizedBox(height: 4),
@@ -843,10 +846,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ],
                             ),
                           ),
-                          Text(
-                            (type == 'expense' ? '- ' : '+ ') +
-                                _money.format(amount),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              (type == 'expense' ? '- ' : '+ ') +
+                                  _money.format(amount),
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ],
                       ),
