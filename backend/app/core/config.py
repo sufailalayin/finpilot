@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     otp_expiry_minutes: int = 10
     otp_resend_seconds: int = 60
     otp_max_attempts: int = 5
+    otp_test_code: str = ""
 
     email_delivery_mode: str = "log"
     smtp_host: str = ""
