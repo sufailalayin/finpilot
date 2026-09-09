@@ -16,6 +16,8 @@ class LiabilityCreate(BaseModel):
     next_due_on: date | None = None
     start_date: date | None = None
     end_date: date | None = None
+    funding_account_id: uuid.UUID | None = None
+    funding_account_id: uuid.UUID | None = None
 
 
 class LiabilityUpdate(BaseModel):
@@ -41,6 +43,7 @@ class LiabilityResponse(BaseModel):
     next_due_on: date | None
     start_date: date | None
     end_date: date | None
+    funding_account_id: uuid.UUID | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -51,6 +54,7 @@ class LiabilityPaymentCreate(BaseModel):
     interest_component: Decimal = Field(default=Decimal("0.00"), ge=0)
     paid_on: date
     note: str | None = Field(default=None, max_length=300)
+    payment_account_id: uuid.UUID | None = None
 
 
 class LiabilityPaymentResponse(LiabilityPaymentCreate):
