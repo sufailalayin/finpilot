@@ -7,8 +7,8 @@ Revises: 0013_merge_admin_auth_credit_card
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0014_billing_plan_google_play_product"
-down_revision = "0013_merge_admin_auth_credit_card"
+revision = "0014_plan_play_id"
+down_revision = "0013_merge_heads"
 branch_labels = None
 depends_on = None
 
