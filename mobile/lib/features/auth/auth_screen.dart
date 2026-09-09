@@ -253,6 +253,10 @@ class _AuthScreenState extends State<AuthScreen> {
                               ],
                               TextField(
                                 controller: _email,
+                                autofillHints: const [
+                                  AutofillHints.username,
+                                  AutofillHints.email,
+                                ],
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
                                 autocorrect: false,
@@ -267,6 +271,11 @@ class _AuthScreenState extends State<AuthScreen> {
                               const SizedBox(height: 16),
                               TextField(
                                 controller: _password,
+                                autofillHints: [
+                                  _registerMode
+                                      ? AutofillHints.newPassword
+                                      : AutofillHints.password,
+                                ],
                                 obscureText: _obscurePassword,
                                 textInputAction: TextInputAction.done,
                                 onChanged: (_) => setState(() {}),
