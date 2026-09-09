@@ -47,15 +47,18 @@ class _AutomationScreenState extends State<AutomationScreen> {
     bool autoRenew = false;
     double reminderDays = 3;
     final provider = TextEditingController();
+    final cardLast4 = TextEditingController();
+    DateTime? generatedOn;
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setLocal) => AlertDialog(
           title: const Text('Add bill reminder'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               TextField(
                 controller: name,
                 decoration: const InputDecoration(labelText: 'Bill name'),
@@ -77,9 +80,17 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   DropdownMenuItem(value: 'emi', child: Text('EMI')),
                   DropdownMenuItem(value: 'insurance', child: Text('Insurance')),
                   DropdownMenuItem(value: 'utility', child: Text('Utility')),
+                  DropdownMenuItem(value: 'credit_card', child: Text('Credit card')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setLocal(() => billType = value);
+                  if (value != null) {
+                    setLocal(() {
+                      billType = value;
+                      if (value == 'credit_card') {
+                        frequency = 'monthly';
+                      }
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -87,6 +98,40 @@ class _AutomationScreenState extends State<AutomationScreen> {
                 controller: provider,
                 decoration: const InputDecoration(labelText: 'Provider / company'),
               ),
+              if (billType == 'credit_card') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cardLast4,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Card last 4 digits',
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Bill generated / statement date'),
+                  subtitle: Text(
+                    generatedOn == null
+                        ? 'Select date'
+                        : DateFormat('dd MMM yyyy').format(generatedOn!),
+                  ),
+                  trailing: const Icon(Icons.receipt_long_outlined),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      initialDate: generatedOn ?? DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setLocal(() => generatedOn = picked);
+                    }
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: frequency,
@@ -124,7 +169,11 @@ class _AutomationScreenState extends State<AutomationScreen> {
               const SizedBox(height: 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Due date'),
+                title: Text(
+                  billType == 'credit_card'
+                      ? 'Payment last date'
+                      : 'Due date',
+                ),
                 subtitle: Text(DateFormat('dd MMM yyyy').format(due)),
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -136,7 +185,8 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   if (picked != null) setLocal(() => due = picked);
                 },
               ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -161,6 +211,10 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   provider: provider.text,
                   reminderDaysBefore: reminderDays.round(),
                   autoRenew: autoRenew,
+                  billGeneratedOn:
+                      billType == 'credit_card' ? generatedOn : null,
+                  cardLast4:
+                      billType == 'credit_card' ? cardLast4.text : null,
                 );
                 if (context.mounted) Navigator.pop(context, true);
               },
@@ -174,6 +228,7 @@ class _AutomationScreenState extends State<AutomationScreen> {
     name.dispose();
     amount.dispose();
     provider.dispose();
+    cardLast4.dispose();
     if (saved == true) await _refresh();
   }
 
@@ -181,6 +236,12 @@ class _AutomationScreenState extends State<AutomationScreen> {
     final name = TextEditingController(text: bill['name']?.toString() ?? '');
     final amount = TextEditingController(text: bill['amount']?.toString() ?? '');
     final provider = TextEditingController(text: bill['provider']?.toString() ?? '');
+    final cardLast4 = TextEditingController(
+      text: bill['card_last4']?.toString() ?? '',
+    );
+    DateTime? generatedOn = bill['bill_generated_on'] == null
+        ? null
+        : DateTime.tryParse(bill['bill_generated_on'].toString());
     var due = DateTime.tryParse(bill['due_on']?.toString() ?? '') ?? DateTime.now();
     var frequency = bill['frequency']?.toString() ?? 'once';
     var billType = bill['bill_type']?.toString() ?? 'bill';
@@ -211,11 +272,50 @@ class _AutomationScreenState extends State<AutomationScreen> {
                     DropdownMenuItem(value: 'emi', child: Text('EMI')),
                     DropdownMenuItem(value: 'insurance', child: Text('Insurance')),
                     DropdownMenuItem(value: 'utility', child: Text('Utility')),
+                    DropdownMenuItem(value: 'credit_card', child: Text('Credit card')),
                   ],
                   onChanged: (value) {
-                    if (value != null) setLocal(() => billType = value);
+                    if (value != null) {
+                      setLocal(() {
+                        billType = value;
+                        if (value == 'credit_card') {
+                          frequency = 'monthly';
+                        }
+                      });
+                    }
                   },
                 ),
+                if (billType == 'credit_card') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: cardLast4,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Card last 4 digits',
+                      counterText: '',
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Bill generated / statement date'),
+                    subtitle: Text(
+                      generatedOn == null
+                          ? 'Select date'
+                          : DateFormat('dd MMM yyyy').format(generatedOn!),
+                    ),
+                    trailing: const Icon(Icons.receipt_long_outlined),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+                        lastDate: DateTime.now().add(const Duration(days: 3650)),
+                        initialDate: generatedOn ?? DateTime.now(),
+                      );
+                      if (picked != null) setLocal(() => generatedOn = picked);
+                    },
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: frequency,
@@ -246,7 +346,11 @@ class _AutomationScreenState extends State<AutomationScreen> {
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Due date'),
+                  title: Text(
+                    billType == 'credit_card'
+                        ? 'Payment last date'
+                        : 'Due date',
+                  ),
                   subtitle: Text(DateFormat('dd MMM yyyy').format(due)),
                   onTap: () async {
                     final picked = await showDatePicker(
@@ -277,6 +381,10 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   provider: provider.text,
                   reminderDaysBefore: reminderDays.round(),
                   autoRenew: autoRenew,
+                  billGeneratedOn:
+                      billType == 'credit_card' ? generatedOn : null,
+                  cardLast4:
+                      billType == 'credit_card' ? cardLast4.text : null,
                 );
                 if (context.mounted) Navigator.pop(context, true);
               },
@@ -290,6 +398,7 @@ class _AutomationScreenState extends State<AutomationScreen> {
     name.dispose();
     amount.dispose();
     provider.dispose();
+    cardLast4.dispose();
     if (saved == true) await _refresh();
   }
 
@@ -651,10 +760,22 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   ...bills.map(
                     (bill) => Card(
                       child: ListTile(
-                        leading:
-                            const Icon(Icons.notifications_none_outlined),
+                        leading: Icon(
+                          bill['bill_type'] == 'credit_card'
+                              ? Icons.credit_card_outlined
+                              : Icons.notifications_none_outlined,
+                        ),
                         title: Text(bill['name'].toString()),
-                        subtitle: Text('Due ' + bill['due_on'].toString()),
+                        subtitle: Text(
+                          bill['bill_type'] == 'credit_card'
+                              ? 'Statement ' +
+                                  (bill['bill_generated_on']?.toString() ?? '—') +
+                                  ' • Pay by ' +
+                                  bill['due_on'].toString()
+                              : 'Due ' + bill['due_on'].toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         trailing: PopupMenuButton<String>(
                           onSelected: (action) async {
                             final row = Map<String, dynamic>.from(bill as Map);
