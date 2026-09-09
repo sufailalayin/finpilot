@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../assets/assets_screen.dart';
 import '../automation/automation_screen.dart';
 import '../liabilities/liabilities_screen.dart';
+import '../receivables/receivables_screen.dart';
 import '../subscription/pro_feature_gate.dart';
 import 'planning_service.dart';
 import 'budget_dashboard_screen.dart';
@@ -442,6 +443,20 @@ class _PlanningScreenState extends State<PlanningScreen> {
             ),
             icon: const Icon(Icons.account_balance_outlined),
             label: const Text('Loans, EMI & debt analytics'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ProFeatureGate(
+                  api: widget.api,
+                  featureCode: 'assets_liabilities',
+                  child: ReceivablesScreen(api: widget.api),
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.handshake_outlined),
+            label: const Text('Money given & pending returns'),
           ),
           const SizedBox(height: 12),
           FilledButton.tonalIcon(
