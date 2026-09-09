@@ -46,6 +46,23 @@ class DashboardAlert(BaseModel):
     due_on: date | None = None
 
 
+class DashboardGoal(BaseModel):
+    id: str
+    name: str
+    goal_type: str
+    target_amount: Decimal
+    current_amount: Decimal
+    target_date: date | None = None
+    progress_pct: float
+
+
+class DashboardEmergencyFund(BaseModel):
+    months_covered: float | None = None
+    liquid_balance: Decimal
+    monthly_expense: Decimal
+    goal: DashboardGoal | None = None
+
+
 class DashboardUpcomingBill(BaseModel):
     id: str
     name: str
@@ -74,3 +91,5 @@ class DashboardResponse(BaseModel):
     insights: list[DashboardInsight]
     alerts: list[DashboardAlert]
     upcoming_bills: list[DashboardUpcomingBill]
+    goals: list[DashboardGoal]
+    emergency_fund: DashboardEmergencyFund
