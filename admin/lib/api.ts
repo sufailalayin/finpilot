@@ -61,3 +61,6 @@ export const revokeAdminUserSessions = (userId: string, reason: string) =>
 
 export const sendAdminTestEmail = () =>
   apiRequest("/admin/email/test", { method: "POST" });
+
+
+export const fetchSystemReadiness = () => apiGet("/ready");
