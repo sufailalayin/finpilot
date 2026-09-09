@@ -49,6 +49,21 @@ def _model_row(instance) -> dict:
     }
 
 
+
+
+def _export_profile(user: User) -> dict:
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "status": user.status.value,
+        "is_admin": user.is_admin,
+        "email_verified": user.email_verified,
+        "created_at": user.created_at.isoformat(),
+        "updated_at": user.updated_at.isoformat(),
+    }
+
+
 async def _rows(db: AsyncSession, model, user_id) -> list[dict]:
     result = await db.execute(select(model).where(model.user_id == user_id))
     return [_model_row(item) for item in result.scalars().all()]
@@ -100,16 +115,7 @@ async def export_account_data(
     db: AsyncSession = Depends(get_db),
 ) -> DataExportResponse:
     data = {
-        "profile": {
-            "id": str(user.id),
-            "email": user.email,
-            "full_name": user.full_name,
-            "status": user.status.value,
-            "is_admin": user.is_admin,
-            "email_verified": user.email_verified,
-            "created_at": user.created_at.isoformat(),
-            "updated_at": user.updated_at.isoformat(),
-        },
+        "profile": _export_profile(user),
         "accounts": await _rows(db, FinanceAccount, user.id),
         "categories": await _rows(db, Category, user.id),
         "transactions": await _rows(db, Transaction, user.id),
