@@ -56,3 +56,39 @@ def test_manual_admin_can_explicitly_override_status():
     )
     assert entitlement.plan_code == PlanCode.PRO
     assert entitlement.status == EntitlementStatus.TRIAL
+
+
+def test_manual_admin_upgrade_clears_old_trial_date():
+    now = datetime.now(timezone.utc)
+    entitlement = Entitlement(
+        plan_code=PlanCode.PRO,
+        status=EntitlementStatus.TRIAL,
+        trial_started_at=now - timedelta(days=6),
+        trial_ends_at=now + timedelta(days=1),
+    )
+    apply_manual_plan_change(
+        entitlement,
+        plan_code=PlanCode.PRO,
+        entitlement_status=EntitlementStatus.ACTIVE,
+    )
+    assert entitlement.status == EntitlementStatus.ACTIVE
+    assert entitlement.plan_code == PlanCode.PRO
+    assert entitlement.trial_ends_at is None
+
+
+def test_manual_non_trial_status_never_keeps_trial_end():
+    now = datetime.now(timezone.utc)
+    entitlement = Entitlement(
+        plan_code=PlanCode.PRO,
+        status=EntitlementStatus.TRIAL,
+        trial_started_at=now,
+        trial_ends_at=now + timedelta(days=7),
+    )
+    apply_manual_plan_change(
+        entitlement,
+        plan_code=PlanCode.FREE,
+        entitlement_status=EntitlementStatus.EXPIRED,
+    )
+    assert entitlement.status == EntitlementStatus.EXPIRED
+    assert entitlement.plan_code == PlanCode.FREE
+    assert entitlement.trial_ends_at is None
