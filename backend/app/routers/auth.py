@@ -1,5 +1,3 @@
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +29,11 @@ from app.services.auth_otp import (
 )
 from app.services.default_categories import build_default_categories
 from app.services.email_delivery import EmailDeliveryError, send_otp_email
+from app.services.login_security import (
+    clear_login_failures,
+    lock_seconds_remaining,
+    record_login_failure,
+)
 from app.services.trials import create_trial_entitlement, normalize_entitlement
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -245,20 +248,12 @@ async def login(
         select(User)
         .options(selectinload(User.entitlement))
         .where(User.email == email)
+        .with_for_update()
     )
     user = result.scalar_one_or_none()
 
-    now = datetime.now(timezone.utc)
-
-    if (
-        user is not None
-        and user.login_locked_until is not None
-        and user.login_locked_until > now
-    ):
-        retry_after = max(
-            1,
-            int((user.login_locked_until - now).total_seconds()),
-        )
+    retry_after = lock_seconds_remaining(user) if user is not None else 0
+    if retry_after > 0:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many sign-in attempts. Please try again later.",
@@ -272,12 +267,7 @@ async def login(
 
     if not password_ok:
         if user is not None:
-            user.failed_login_attempts += 1
-            if user.failed_login_attempts >= settings.login_max_attempts:
-                user.login_locked_until = now + timedelta(
-                    minutes=settings.login_lock_minutes,
-                )
-                user.failed_login_attempts = 0
+            record_login_failure(user)
 
             db.add(
                 SecurityAuditEvent(
@@ -307,8 +297,7 @@ async def login(
             detail="Email verification required",
         )
 
-    user.failed_login_attempts = 0
-    user.login_locked_until = None
+    clear_login_failures(user)
 
     if user.entitlement is not None:
         previous_status = user.entitlement.status
