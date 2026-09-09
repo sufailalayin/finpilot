@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  fetchAdminActionLogs,
   fetchAdminAIUsage,
   fetchAdminOverview,
   fetchAdminSecurityEvents,
   fetchAdminSubscriptions,
   fetchAdminUsers,
+  revokeAdminUserSessions,
+  updateAdminUser,
 } from "../lib/api";
 
 type Overview = {
@@ -54,6 +57,19 @@ type AIUsage = {
   response_chars_7d: number;
 };
 
+type ActionLog = {
+  id: string;
+  actor_admin_email: string | null;
+  target_user_email: string | null;
+  action: string;
+  reason: string;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+};
+
 type SecurityEvent = {
   id: string;
   user_id: string | null;
@@ -65,7 +81,7 @@ type SecurityEvent = {
   created_at: string;
 };
 
-type Section = "overview" | "users" | "subscriptions" | "ai" | "security";
+type Section = "overview" | "users" | "subscriptions" | "ai" | "security" | "logs";
 
 const nav: { key: Section; label: string; hint: string }[] = [
   { key: "overview", label: "Overview", hint: "Command center" },
@@ -73,6 +89,7 @@ const nav: { key: Section; label: string; hint: string }[] = [
   { key: "subscriptions", label: "Subscriptions", hint: "Plans" },
   { key: "ai", label: "AI Usage", hint: "Consumption" },
   { key: "security", label: "Security", hint: "Audit" },
+  { key: "logs", label: "Admin Logs", hint: "Changes" },
 ];
 
 function formatDate(value: string | null) {
@@ -104,6 +121,8 @@ export default function AdminDashboard() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionSummary | null>(null);
   const [ai, setAI] = useState<AIUsage | null>(null);
   const [security, setSecurity] = useState<SecurityEvent[]>([]);
+  const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -112,18 +131,20 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [overviewData, userData, subscriptionData, aiData, securityData] = await Promise.all([
+      const [overviewData, userData, subscriptionData, aiData, securityData, actionLogData] = await Promise.all([
         fetchAdminOverview(),
         fetchAdminUsers(),
         fetchAdminSubscriptions(),
         fetchAdminAIUsage(),
         fetchAdminSecurityEvents(),
+        fetchAdminActionLogs(),
       ]);
       setOverview(overviewData);
       setUsers(userData);
       setSubscriptions(subscriptionData);
       setAI(aiData);
       setSecurity(securityData);
+      setActionLogs(actionLogData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load admin data";
       if (message === "ADMIN_SESSION_EXPIRED") {
@@ -205,7 +226,8 @@ export default function AdminDashboard() {
               {section === "users" && "Search and inspect FinPilot accounts, access status and plan lifecycle."}
               {section === "subscriptions" && "Monitor trial, free, paid, cancelled and expired entitlement states."}
               {section === "ai" && "Track AI feature adoption and consumption across the platform."}
-              {section === "security" && "Review authentication and account security activity."}
+              {section === "security" && "Review authentication, session revocation and account security activity."}
+              {section === "logs" && "Detailed record of every manual admin change, including who changed what and why."}
             </p>
           </div>
           <div className="actions">
@@ -280,7 +302,7 @@ export default function AdminDashboard() {
                 placeholder="Search name, email, plan or status"
               />
             </div>
-            <UsersTable users={visibleUsers} />
+            <UsersTable users={visibleUsers} onManage={setSelectedUser} />
           </section>
         )}
 
@@ -303,7 +325,7 @@ export default function AdminDashboard() {
             </div>
             <section className="section">
               <div className="section-header"><div><h2>Subscription members</h2><p>Plan and lifecycle dates for every account.</p></div></div>
-              <UsersTable users={users} />
+              <UsersTable users={users} onManage={setSelectedUser} />
             </section>
           </>
         )}
@@ -324,6 +346,38 @@ export default function AdminDashboard() {
               </article>
             ))}
           </div>
+        )}
+
+        {section === "logs" && (
+          <section className="section">
+            <div className="section-header">
+              <div><h2>Admin action logs</h2><p>Every manual plan, account and session-control change is recorded here.</p></div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Admin</th><th>Target user</th><th>Action</th><th>Reason</th><th>Before</th><th>After</th><th>IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actionLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{formatDateTime(log.created_at)}</td>
+                      <td>{log.actor_admin_email ?? "—"}</td>
+                      <td>{log.target_user_email ?? "—"}</td>
+                      <td><span className="badge">{log.action.replaceAll("_", " ")}</span></td>
+                      <td>{log.reason}</td>
+                      <td><code>{log.before_state ? JSON.stringify(log.before_state) : "—"}</code></td>
+                      <td><code>{log.after_state ? JSON.stringify(log.after_state) : "—"}</code></td>
+                      <td>{log.ip_address ?? "—"}</td>
+                    </tr>
+                  ))}
+                  {!actionLogs.length && <tr><td colSpan={8} className="empty">No admin changes recorded yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         {section === "security" && (
@@ -355,18 +409,29 @@ export default function AdminDashboard() {
             </div>
           </section>
         )}
+        {selectedUser ? (
+          <ManageUserModal
+            key={selectedUser.id}
+            user={selectedUser}
+            onClose={() => setSelectedUser(null)}
+            onSaved={async () => {
+              setSelectedUser(null);
+              await load();
+            }}
+          />
+        ) : null}
       </section>
     </main>
   );
 }
 
-function UsersTable({ users }: { users: UserRow[] }) {
+function UsersTable({ users, onManage }: { users: UserRow[]; onManage?: (user: UserRow) => void }) {
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Name</th><th>Email</th><th>Account</th><th>Plan</th><th>Entitlement</th><th>Trial ends</th><th>Paid until</th><th>Joined</th>
+            <th>Name</th><th>Email</th><th>Account</th><th>Plan</th><th>Entitlement</th><th>Trial ends</th><th>Paid until</th><th>Joined</th>{onManage ? <th>Control</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -380,11 +445,120 @@ function UsersTable({ users }: { users: UserRow[] }) {
               <td>{formatDate(user.trial_ends_at)}</td>
               <td>{formatDate(user.paid_until)}</td>
               <td>{formatDate(user.created_at)}</td>
+              {onManage ? <td><button className="btn" onClick={() => onManage(user)}>Manage</button></td> : null}
             </tr>
           ))}
-          {!users.length && <tr><td colSpan={8} className="empty">No users found.</td></tr>}
+          {!users.length && <tr><td colSpan={onManage ? 9 : 8} className="empty">No users found.</td></tr>}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+function ManageUserModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: UserRow;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [userStatus, setUserStatus] = useState(user.user_status);
+  const [planCode, setPlanCode] = useState(user.plan_code ?? "free");
+  const [entitlementStatus, setEntitlementStatus] = useState(user.entitlement_status ?? "expired");
+  const [trialEndsAt, setTrialEndsAt] = useState(user.trial_ends_at ? user.trial_ends_at.slice(0, 10) : "");
+  const [paidUntil, setPaidUntil] = useState(user.paid_until ? user.paid_until.slice(0, 10) : "");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (reason.trim().length < 3) {
+      setError("Enter a reason for this admin change.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await updateAdminUser(user.id, {
+        user_status: userStatus,
+        plan_code: planCode,
+        entitlement_status: entitlementStatus,
+        trial_ends_at: trialEndsAt ? new Date(trialEndsAt + "T23:59:59Z").toISOString() : null,
+        paid_until: paidUntil ? new Date(paidUntil + "T23:59:59Z").toISOString() : null,
+        reason: reason.trim(),
+      });
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update user");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function revokeSessions() {
+    if (reason.trim().length < 3) {
+      setError("Enter a reason before revoking sessions.");
+      return;
+    }
+    if (!window.confirm("Sign this user out from all current sessions?")) return;
+    setSaving(true);
+    setError("");
+    try {
+      await revokeAdminUserSessions(user.id, reason.trim());
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to revoke sessions");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="card modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="section-header">
+          <div>
+            <span className="eyebrow">Secure user control</span>
+            <h2>{user.full_name ?? user.email}</h2>
+            <p>{user.email}</p>
+          </div>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+
+        <div className="control-grid">
+          <label className="field"><span>Account status</span>
+            <select value={userStatus} onChange={(e) => setUserStatus(e.target.value)}>
+              <option value="active">Active</option><option value="suspended">Suspended</option>
+            </select>
+          </label>
+          <label className="field"><span>Plan</span>
+            <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}>
+              <option value="free">Free</option><option value="pro">Pro</option>
+            </select>
+          </label>
+          <label className="field"><span>Plan status</span>
+            <select value={entitlementStatus} onChange={(e) => setEntitlementStatus(e.target.value)}>
+              <option value="trial">Trial</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <label className="field"><span>Trial ends</span><input type="date" value={trialEndsAt} onChange={(e) => setTrialEndsAt(e.target.value)} /></label>
+          <label className="field"><span>Paid until</span><input type="date" value={paidUntil} onChange={(e) => setPaidUntil(e.target.value)} /></label>
+        </div>
+
+        <label className="field"><span>Reason for change *</span>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Example: Manual Pro activation after payment verification" maxLength={300} />
+        </label>
+        {error ? <div className="error" style={{ marginTop: 12 }}>{error}</div> : null}
+
+        <div className="modal-actions">
+          <button className="btn btn-danger" disabled={saving} onClick={revokeSessions}>Revoke all sessions</button>
+          <button className="btn primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save access changes"}</button>
+        </div>
+        <p className="security-note">Every change stores the admin, target user, reason, before/after values, IP address and device user-agent.</p>
+      </section>
     </div>
   );
 }
