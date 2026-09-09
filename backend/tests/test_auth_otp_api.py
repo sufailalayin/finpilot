@@ -91,3 +91,45 @@ async def test_forgot_password_response_does_not_reveal_unknown_email():
         )
         assert response.status_code == 200, response.text
         assert "If an account exists" in response.json()["message"]
+
+
+
+@pytest.mark.asyncio
+async def test_signup_otp_resend_is_rate_limited_and_wrong_code_is_rejected():
+    email = f"otp-rate-{uuid4().hex}@example.com"
+    password = "StrongPass123!"
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        register = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": password,
+                "full_name": "OTP Rate Test",
+            },
+        )
+        assert register.status_code == 202, register.text
+
+        resend = await client.post(
+            "/api/v1/auth/register/resend",
+            json={"email": email},
+        )
+        assert resend.status_code == 429, resend.text
+        assert int(resend.headers["retry-after"]) >= 1
+
+        wrong = await client.post(
+            "/api/v1/auth/register/verify",
+            json={"email": email, "code": "000000"},
+        )
+        assert wrong.status_code == 400, wrong.text
+
+        correct = await client.post(
+            "/api/v1/auth/register/verify",
+            json={"email": email, "code": "123456"},
+        )
+        assert correct.status_code == 200, correct.text
+        assert correct.json()["user"]["email_verified"] is True
