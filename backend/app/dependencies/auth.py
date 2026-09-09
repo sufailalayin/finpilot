@@ -27,6 +27,8 @@ async def get_current_user(
     if claims is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
+    request.state.token_claims = claims
+
     try:
         user_id = uuid.UUID(claims["sub"])
     except ValueError as exc:
