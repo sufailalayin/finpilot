@@ -1,5 +1,7 @@
 import base64
+import hashlib
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -9,13 +11,15 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
-from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
+from app.models.user import BillingPlan, Entitlement, EntitlementStatus, PaymentRecord, PlanCode, User
 from app.schemas.subscriptions import (
     GooglePlayVerifyRequest,
     GooglePlayVerifyResponse,
     SubscriptionFeaturesResponse,
     FeatureAccess,
     SubscriptionStatusResponse,
+    PublicBillingPlan,
+    PublicBillingPlansResponse,
 )
 from app.services.entitlements import has_pro_access
 from app.services.google_play import get_google_play_verifier
@@ -43,12 +47,56 @@ async def subscription_status(
     if entitlement.status != previous_status:
         await db.commit()
 
+    billing_plan = None
+    if entitlement.billing_plan_id is not None:
+        billing_plan = await db.scalar(
+            select(BillingPlan).where(BillingPlan.id == entitlement.billing_plan_id)
+        )
+
     return SubscriptionStatusResponse(
         plan_code=entitlement.plan_code.value,
         status=entitlement.status.value,
         trial_ends_at=entitlement.trial_ends_at,
         paid_until=entitlement.paid_until,
         provider=entitlement.provider,
+        billing_plan_id=str(entitlement.billing_plan_id) if entitlement.billing_plan_id else None,
+        billing_plan_name=billing_plan.name if billing_plan else None,
+    )
+
+
+@router.get("/plans", response_model=PublicBillingPlansResponse)
+async def public_billing_plans(
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PublicBillingPlansResponse:
+    rows = list(
+        (
+            await db.execute(
+                select(BillingPlan)
+                .where(
+                    BillingPlan.is_active.is_(True),
+                    BillingPlan.access_level == "pro",
+                )
+                .order_by(BillingPlan.price.asc(), BillingPlan.created_at.asc())
+            )
+        ).scalars().all()
+    )
+    return PublicBillingPlansResponse(
+        plans=[
+            PublicBillingPlan(
+                id=str(plan.id),
+                code=plan.code,
+                name=plan.name,
+                access_level=plan.access_level,
+                billing_period=plan.billing_period,
+                price=float(plan.price),
+                currency=plan.currency,
+                description=plan.description,
+                features=plan.features,
+                google_play_product_id=plan.google_play_product_id,
+            )
+            for plan in rows
+        ]
     )
 
 
@@ -58,6 +106,29 @@ async def verify_google_play(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GooglePlayVerifyResponse:
+    try:
+        import uuid
+        billing_plan_id = uuid.UUID(payload.billing_plan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid billing plan id") from exc
+
+    plan = await db.scalar(
+        select(BillingPlan).where(
+            BillingPlan.id == billing_plan_id,
+            BillingPlan.is_active.is_(True),
+            BillingPlan.access_level == "pro",
+        )
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Billing plan not found")
+    if not plan.google_play_product_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This plan is not configured for Google Play payment",
+        )
+    if payload.product_id != plan.google_play_product_id:
+        raise HTTPException(status_code=400, detail="Selected plan does not match product")
+
     verifier = get_google_play_verifier()
 
     try:
@@ -79,13 +150,41 @@ async def verify_google_play(
             paid_until=user.entitlement.paid_until,
         )
 
+    entitlement = user.entitlement
     apply_paid_entitlement(
-        user.entitlement,
+        entitlement,
         provider="google_play",
         provider_subscription_id=payload.purchase_token,
         provider_product_id=payload.product_id,
         paid_until=result.expiry_time,
     )
+    entitlement.billing_plan_id = plan.id
+
+    payment_reference = hashlib.sha256(payload.purchase_token.encode("utf-8")).hexdigest()
+    existing_payment = await db.scalar(
+        select(PaymentRecord).where(
+            PaymentRecord.user_id == user.id,
+            PaymentRecord.provider == "google_play",
+            PaymentRecord.reference == payment_reference,
+        )
+    )
+    if existing_payment is None:
+        db.add(
+            PaymentRecord(
+                user_id=user.id,
+                billing_plan_id=plan.id,
+                amount=plan.price,
+                currency=plan.currency,
+                payment_method="google_play",
+                provider="google_play",
+                reference=payment_reference,
+                status="received",
+                notes="Verified Google Play subscription purchase",
+                received_at=datetime.now(timezone.utc),
+                recorded_by_admin_id=None,
+            )
+        )
+
     await db.commit()
 
     try:
@@ -98,9 +197,9 @@ async def verify_google_play(
 
     return GooglePlayVerifyResponse(
         verified=True,
-        plan_code=user.entitlement.plan_code.value,
-        status=user.entitlement.status.value,
-        paid_until=user.entitlement.paid_until,
+        plan_code=entitlement.plan_code.value,
+        status=entitlement.status.value,
+        paid_until=entitlement.paid_until,
     )
 
 
