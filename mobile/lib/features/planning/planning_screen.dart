@@ -169,6 +169,230 @@ class _PlanningScreenState extends State<PlanningScreen> {
     if (saved == true) setState(_reload);
   }
 
+  Future<void> _editBudget(Map<String, dynamic> item) async {
+    final name = TextEditingController(text: item['name']?.toString() ?? '');
+    final amount = TextEditingController(text: item['amount']?.toString() ?? '');
+    final start =
+        DateTime.tryParse(item['period_start']?.toString() ?? '') ??
+            DateTime.now();
+    final end =
+        DateTime.tryParse(item['period_end']?.toString() ?? '') ??
+            DateTime.now();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit budget'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Budget name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amount,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Budget amount',
+                prefixText: '₹ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final value = double.tryParse(
+                amount.text.trim().replaceAll(',', ''),
+              );
+              if (name.text.trim().isEmpty || value == null || value <= 0) {
+                return;
+              }
+
+              await _planning.updateBudget(
+                budgetId: item['id'].toString(),
+                name: name.text,
+                amount: value,
+                periodStart: start,
+                periodEnd: end,
+                categoryId: item['category_id']?.toString(),
+                rolloverEnabled: item['rollover_enabled'] == true,
+                alertThresholdPct: double.tryParse(
+                      item['alert_threshold_pct']?.toString() ?? '80',
+                    ) ??
+                    80,
+              );
+
+              if (context.mounted) Navigator.pop(context, true);
+            },
+            child: const Text('Save changes'),
+          ),
+        ],
+      ),
+    );
+
+    name.dispose();
+    amount.dispose();
+
+    if (saved == true) {
+      setState(_reload);
+    }
+  }
+
+  Future<void> _deleteBudget(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete budget?'),
+        content: Text(
+          'Delete "' + item['name'].toString() + '"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await _planning.deleteBudget(item['id'].toString());
+    if (mounted) setState(_reload);
+  }
+
+  Future<void> _editGoal(Map<String, dynamic> item) async {
+    final name = TextEditingController(text: item['name']?.toString() ?? '');
+    final target = TextEditingController(
+      text: item['target_amount']?.toString() ?? '',
+    );
+    final current = TextEditingController(
+      text: item['current_amount']?.toString() ?? '0',
+    );
+    final goalType = item['goal_type']?.toString() ?? 'other';
+    final targetDate = item['target_date'] == null
+        ? null
+        : DateTime.tryParse(item['target_date'].toString());
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit savings goal'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Goal name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: target,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Target amount',
+                prefixText: '₹ ',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: current,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Already saved',
+                prefixText: '₹ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final targetValue = double.tryParse(
+                target.text.trim().replaceAll(',', ''),
+              );
+              final currentValue = double.tryParse(
+                current.text.trim().replaceAll(',', ''),
+              );
+
+              if (name.text.trim().isEmpty ||
+                  targetValue == null ||
+                  currentValue == null ||
+                  targetValue <= 0 ||
+                  currentValue < 0 ||
+                  currentValue > targetValue) {
+                return;
+              }
+
+              await _planning.updateGoal(
+                goalId: item['id'].toString(),
+                name: name.text,
+                goalType: goalType,
+                targetAmount: targetValue,
+                currentAmount: currentValue,
+                targetDate: targetDate,
+              );
+
+              if (context.mounted) Navigator.pop(context, true);
+            },
+            child: const Text('Save changes'),
+          ),
+        ],
+      ),
+    );
+
+    name.dispose();
+    target.dispose();
+    current.dispose();
+
+    if (saved == true) {
+      setState(_reload);
+    }
+  }
+
+  Future<void> _deleteGoal(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete goal?'),
+        content: Text(
+          'Delete "' + item['name'].toString() + '"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await _planning.deleteGoal(item['id'].toString());
+    if (mounted) setState(_reload);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,7 +465,36 @@ class _PlanningScreenState extends State<PlanningScreen> {
                     leading: const Icon(Icons.pie_chart_outline),
                     title: Text(item['name'].toString()),
                     subtitle: Text(item['period_start'].toString() + ' to ' + item['period_end'].toString()),
-                    trailing: Text(_money.format(double.parse(item['amount'].toString()))),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _money.format(
+                            double.tryParse(item['amount'].toString()) ?? 0,
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (action) async {
+                            final row = Map<String, dynamic>.from(item as Map);
+                            if (action == 'edit') {
+                              await _editBudget(row);
+                            } else if (action == 'delete') {
+                              await _deleteBudget(row);
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 )).toList(),
               );
@@ -280,7 +533,40 @@ class _PlanningScreenState extends State<PlanningScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item['name'].toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                onSelected: (action) async {
+                                  final row = Map<String, dynamic>.from(
+                                    item as Map,
+                                  );
+                                  if (action == 'edit') {
+                                    await _editGoal(row);
+                                  } else if (action == 'delete') {
+                                    await _deleteGoal(row);
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           LinearProgressIndicator(value: progress),
                           const SizedBox(height: 8),
