@@ -7,7 +7,6 @@ class AutomationService {
 
   Future<Map<String, dynamic>> alerts() async {
     final response = await _api.dio.get('/automation/alerts');
-    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
