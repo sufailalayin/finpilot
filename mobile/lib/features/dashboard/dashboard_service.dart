@@ -21,6 +21,7 @@ class DashboardData {
     required this.upcomingAlertCount,
     required this.insights,
     required this.alerts,
+    required this.upcomingBills,
   });
 
   final double totalBalance;
@@ -42,6 +43,7 @@ class DashboardData {
   final int upcomingAlertCount;
   final List<dynamic> insights;
   final List<dynamic> alerts;
+  final List<dynamic> upcomingBills;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] is Map
@@ -80,6 +82,7 @@ class DashboardData {
           int.tryParse(json['upcoming_alert_count'].toString()) ?? 0,
       insights: (json['insights'] as List<dynamic>?) ?? const [],
       alerts: (json['alerts'] as List<dynamic>?) ?? const [],
+      upcomingBills: (json['upcoming_bills'] as List<dynamic>?) ?? const [],
     );
   }
 }
