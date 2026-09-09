@@ -19,6 +19,7 @@ from app.models.user import (
     User,
     UserStatus,
 )
+from app.services.subscriptions import apply_manual_plan_change
 from app.schemas.admin import (
     AdminActionLogRow,
     AdminAIUsageSummary,
@@ -306,26 +307,27 @@ async def update_user(
         await db.flush()
 
     if entitlement is not None:
+        requested_plan = entitlement.plan_code
+        requested_status = None
+
         if payload.plan_code is not None:
             try:
-                entitlement.plan_code = PlanCode(payload.plan_code)
+                requested_plan = PlanCode(payload.plan_code)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid plan code") from exc
 
-            # A manual plan change should take effect immediately even when
-            # the admin does not separately change entitlement_status.
-            if payload.entitlement_status is None:
-                entitlement.status = (
-                    EntitlementStatus.ACTIVE
-                    if entitlement.plan_code == PlanCode.PRO
-                    else EntitlementStatus.EXPIRED
-                )
-
         if payload.entitlement_status is not None:
             try:
-                entitlement.status = EntitlementStatus(payload.entitlement_status)
+                requested_status = EntitlementStatus(payload.entitlement_status)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid entitlement status") from exc
+
+        if payload.plan_code is not None or payload.entitlement_status is not None:
+            apply_manual_plan_change(
+                entitlement,
+                plan_code=requested_plan,
+                entitlement_status=requested_status,
+            )
         if "trial_ends_at" in payload.model_fields_set:
             entitlement.trial_ends_at = payload.trial_ends_at
         if "paid_until" in payload.model_fields_set:
