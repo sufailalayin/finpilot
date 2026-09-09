@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
@@ -22,9 +24,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool _codeSent = false;
   bool _loading = false;
+  Timer? _timer;
+  int _seconds = 0;
   bool _obscure = true;
   String? _error;
   String? _message;
+
+  void _startCountdown() {
+    _timer?.cancel();
+    setState(() => _seconds = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_seconds <= 1) {
+        timer.cancel();
+        setState(() => _seconds = 0);
+      } else {
+        setState(() => _seconds--);
+      }
+    });
+  }
 
   Future<void> _sendCode() async {
     if (_loading) return;
@@ -47,6 +65,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         _codeSent = true;
         _message = message;
       });
+      _startCountdown();
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Unable to request a reset code right now.');
@@ -105,6 +124,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   void dispose() {
+    _timer?.cancel();
     _email.dispose();
     _code.dispose();
     _password.dispose();
@@ -211,8 +231,30 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             if (_codeSent) ...[
               const SizedBox(height: 10),
               TextButton(
-                onPressed: _loading ? null : _sendCode,
-                child: const Text('Send code again'),
+                onPressed:
+                    _loading || _seconds > 0 ? null : _sendCode,
+                child: Text(
+                  _seconds > 0
+                      ? 'Send code again in ${_seconds}s'
+                      : 'Send code again',
+                ),
+              ),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        _timer?.cancel();
+                        setState(() {
+                          _codeSent = false;
+                          _seconds = 0;
+                          _message = null;
+                          _error = null;
+                          _code.clear();
+                          _password.clear();
+                          _confirm.clear();
+                        });
+                      },
+                child: const Text('Use a different email'),
               ),
             ],
           ],
