@@ -33,7 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final email = _email.text.trim();
     final password = _password.text;
     final emailOk = email.contains('@') && email.contains('.');
-    final passwordOk = password.length >= 8;
+    final passwordOk = password.length >= 10;
     final nameOk = !_registerMode || _name.text.trim().isNotEmpty;
     final legalOk = !_registerMode || _legalAccepted;
     return emailOk && passwordOk && nameOk && legalOk;
@@ -50,7 +50,7 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!_formLooksValid || _loading) {
       setState(() {
         _error = _registerMode
-            ? 'Enter your name and valid email, use a password with at least 8 characters, and accept the Terms and Privacy Policy.'
+            ? 'Enter your name and valid email, use a password with at least 10 characters, and accept the Terms and Privacy Policy.'
             : 'Enter a valid email and password.';
       });
       return;
