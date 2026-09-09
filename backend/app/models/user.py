@@ -187,6 +187,24 @@ class BillingPlan(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
+
+class AppRelease(Base):
+    __tablename__ = "app_release"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    latest_version: Mapped[str] = mapped_column(String(40), default="1.0.0", nullable=False)
+    latest_build_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    minimum_version: Mapped[str] = mapped_column(String(40), default="1.0.0", nullable=False)
+    minimum_build_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    update_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    release_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    distribution: Mapped[str] = mapped_column(String(30), default="apk", nullable=False)
+    is_update_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class UserLocation(Base):
     __tablename__ = "user_locations"
 
