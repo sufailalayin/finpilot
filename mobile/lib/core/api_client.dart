@@ -52,6 +52,12 @@ class ApiClient {
             return;
           }
 
+          if (error.response?.statusCode == 402) {
+            subscriptionExpired.value = true;
+            handler.next(error);
+            return;
+          }
+
           if (_shouldRetry(error)) {
             final options = error.requestOptions;
             final count = (options.extra[_retryKey] as int?) ?? 0;
@@ -81,6 +87,7 @@ class ApiClient {
   final FlutterSecureStorage _storage;
   final ValueNotifier<int> dataRevision = ValueNotifier<int>(0);
   final ValueNotifier<bool> sessionExpired = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> subscriptionExpired = ValueNotifier<bool>(false);
 
   void notifyDataChanged() {
     dataRevision.value++;
