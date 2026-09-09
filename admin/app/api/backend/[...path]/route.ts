@@ -12,13 +12,20 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
   const cookieToken = request.cookies.get("finpilot_admin_session")?.value;
-  const incomingAuthorization = request.headers.get("authorization");
 
   if (contentType) headers.set("content-type", contentType);
   if (cookieToken) {
     headers.set("authorization", "Bearer " + cookieToken);
-  } else if (incomingAuthorization) {
-    headers.set("authorization", incomingAuthorization);
+  }
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const origin = request.headers.get("origin");
+    if (origin && origin !== request.nextUrl.origin) {
+      return NextResponse.json(
+        { detail: "Cross-origin admin request rejected." },
+        { status: 403 },
+      );
+    }
   }
 
   const init: RequestInit = {
