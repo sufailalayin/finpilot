@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.user import SecurityAuditEvent, User
+from app.models.user import SecurityAuditEvent, User, UserLocation
 from app.schemas.auth import (
     ForgotPasswordRequest,
     GenericAuthMessage,
@@ -279,6 +279,13 @@ async def login(
         normalize_entitlement(user.entitlement)
         if user.entitlement.status != previous_status:
             await db.commit()
+
+    location = await db.scalar(select(UserLocation).where(UserLocation.user_id == user.id))
+    if location is None:
+        location = UserLocation(user_id=user.id)
+        db.add(location)
+    location.last_ip_address = _request_ip(request)
+    location.last_user_agent = _user_agent(request)
 
     db.add(
         SecurityAuditEvent(
