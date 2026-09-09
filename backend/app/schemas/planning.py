@@ -15,6 +15,16 @@ class BudgetCreate(BaseModel):
     alert_threshold_pct: Decimal = Field(default=Decimal("80.00"), ge=1, le=100)
 
 
+class BudgetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    amount: Decimal | None = Field(default=None, gt=0)
+    period_start: date | None = None
+    period_end: date | None = None
+    category_id: uuid.UUID | None = None
+    rollover_enabled: bool | None = None
+    alert_threshold_pct: Decimal | None = Field(default=None, ge=1, le=100)
+
+
 class BudgetResponse(BudgetCreate):
     id: uuid.UUID
     created_at: datetime
@@ -26,6 +36,14 @@ class SavingsGoalCreate(BaseModel):
     goal_type: str = Field(default="other", min_length=1, max_length=40)
     target_amount: Decimal = Field(gt=0)
     current_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
+    target_date: date | None = None
+
+
+class SavingsGoalUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    goal_type: str | None = Field(default=None, min_length=1, max_length=40)
+    target_amount: Decimal | None = Field(default=None, gt=0)
+    current_amount: Decimal | None = Field(default=None, ge=0)
     target_date: date | None = None
 
 
