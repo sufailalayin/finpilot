@@ -2,15 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import 'play_billing_service.dart';
 import 'subscription_service.dart';
 
 class PaywallScreen extends StatefulWidget {
-  const PaywallScreen({super.key, required this.api});
+  const PaywallScreen({
+    super.key,
+    required this.api,
+    this.onActivated,
+  });
 
   final ApiClient api;
+  final VoidCallback? onActivated;
 
   @override
   State<PaywallScreen> createState() => _PaywallScreenState();
@@ -20,13 +26,19 @@ class _PaywallScreenState extends State<PaywallScreen> {
   late final SubscriptionService _subscriptions = SubscriptionService(widget.api);
   late final PlayBillingService _billing = PlayBillingService();
 
-  StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
+  final _money = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: 0,
+  );
 
+  StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   bool _loading = true;
   bool _billingAvailable = false;
   bool _purchaseBusy = false;
   Map<String, dynamic>? _status;
-  List<ProductDetails> _products = const [];
+  List<Map<String, dynamic>> _plans = const [];
+  Map<String, ProductDetails> _productsById = const {};
   String? _message;
 
   @override
@@ -48,33 +60,53 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Future<void> _load() async {
     try {
       final status = await _subscriptions.status();
+      final plans = await _subscriptions.plans();
       final available = await _billing.isAvailable();
-      final products = available ? await _billing.loadProducts() : <ProductDetails>[];
+
+      final productIds = plans
+          .map((plan) => plan['google_play_product_id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final products = available
+          ? await _billing.loadProducts(productIds)
+          : <ProductDetails>[];
 
       if (!mounted) return;
       setState(() {
         _status = status;
+        _plans = plans;
         _billingAvailable = available;
-        _products = products;
+        _productsById = {
+          for (final product in products) product.id: product,
+        };
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _message = 'Unable to load FinPilot Pro status.';
+        _message = 'Unable to load FinPilot subscription plans.';
       });
     }
   }
 
-  ProductDetails? _product(String id) {
-    for (final product in _products) {
-      if (product.id == id) return product;
-    }
-    return null;
+  ProductDetails? _productForPlan(Map<String, dynamic> plan) {
+    final productId = plan['google_play_product_id']?.toString();
+    if (productId == null || productId.isEmpty) return null;
+    return _productsById[productId];
   }
 
-  Future<void> _buy(ProductDetails product) async {
+  Future<void> _buy(Map<String, dynamic> plan) async {
+    final product = _productForPlan(plan);
+    if (product == null) {
+      setState(() {
+        _message = 'This plan is not ready for Google Play payment yet.';
+      });
+      return;
+    }
+
     setState(() {
       _purchaseBusy = true;
       _message = null;
@@ -118,6 +150,15 @@ class _PaywallScreenState extends State<PaywallScreen> {
     }
   }
 
+  Map<String, dynamic>? _planForProduct(String productId) {
+    for (final plan in _plans) {
+      if (plan['google_play_product_id']?.toString() == productId) {
+        return plan;
+      }
+    }
+    return null;
+  }
+
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
       if (!mounted) return;
@@ -148,10 +189,20 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
+        final plan = _planForProduct(purchase.productID);
+        if (plan == null) {
+          setState(() {
+            _purchaseBusy = false;
+            _message = 'Purchase product is not linked to an active FinPilot plan.';
+          });
+          continue;
+        }
+
         final token = purchase.verificationData.serverVerificationData;
 
         try {
           final result = await _subscriptions.verifyGooglePlay(
+            billingPlanId: plan['id'].toString(),
             productId: purchase.productID,
             purchaseToken: token,
           );
@@ -164,8 +215,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
             setState(() {
               _status = status;
               _purchaseBusy = false;
-              _message = 'FinPilot Pro activated successfully.';
+              _message = 'FinPilot activated successfully.';
             });
+            widget.api.notifyDataChanged();
+            widget.onActivated?.call();
           } else {
             if (!mounted) return;
             setState(() {
@@ -177,7 +230,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
           if (!mounted) return;
           setState(() {
             _purchaseBusy = false;
-            _message = 'Purchase received, but verification failed. Please retry later.';
+            _message = 'Purchase received, but verification failed. Please try again.';
           });
         }
       }
@@ -193,93 +246,143 @@ class _PaywallScreenState extends State<PaywallScreen> {
   @override
   Widget build(BuildContext context) {
     final active = _status?['status']?.toString() ?? 'unknown';
-    final monthly = _product(_billing.monthlyProductId);
-    final yearly = _product(_billing.yearlyProductId);
+    final trialEnds = _status?['trial_ends_at']?.toString();
+    final paidUntil = _status?['paid_until']?.toString();
+    final currentPlan = _status?['billing_plan_name']?.toString();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('FinPilot Pro')),
+      appBar: AppBar(title: const Text('FinPilot Plans')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Text(
-                  'FinPilot Pro',
-                  style: Theme.of(context)
-                      .textTheme
-                      .displaySmall
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Unlock AI money insights, advanced planning, and premium finance tools.',
-                ),
-                const SizedBox(height: 24),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text('Current status: ' + active),
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Text(
+                    'Choose your FinPilot plan',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w900),
                   ),
-                ),
-                const SizedBox(height: 20),
-                const ListTile(
-                  leading: Icon(Icons.auto_awesome_outlined),
-                  title: Text('FinPilot AI'),
-                  subtitle: Text('Personalized insights from your finance data'),
-                ),
-                const ListTile(
-                  leading: Icon(Icons.track_changes_outlined),
-                  title: Text('Advanced goals & budgets'),
-                  subtitle: Text('Plan and track your financial targets'),
-                ),
-                const ListTile(
-                  leading: Icon(Icons.insights_outlined),
-                  title: Text('Advanced reports'),
-                  subtitle: Text('Understand where your money is going'),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _purchaseBusy || monthly == null
-                      ? null
-                      : () => _buy(monthly),
-                  child: Text(
-                    monthly == null
-                        ? 'Monthly plan unavailable'
-                        : 'Monthly — ' + monthly.price,
+                  const SizedBox(height: 8),
+                  Text(
+                    active == 'trial'
+                        ? 'Your trial is active. Choose a plan anytime to continue without interruption.'
+                        : 'Your trial or paid access has ended. Select a plan to unlock FinPilot.',
                   ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: _purchaseBusy || yearly == null
-                      ? null
-                      : () => _buy(yearly),
-                  child: Text(
-                    yearly == null
-                        ? 'Yearly plan unavailable'
-                        : 'Yearly — ' + yearly.price,
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Status: ' + active),
+                          if (currentPlan != null && currentPlan.isNotEmpty)
+                            Text('Current plan: ' + currentPlan),
+                          if (trialEnds != null) Text('Trial ends: ' + trialEnds),
+                          if (paidUntil != null) Text('Paid until: ' + paidUntil),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: _purchaseBusy ? null : _restore,
-                  icon: const Icon(Icons.restore),
-                  label: const Text('Restore purchase'),
-                ),
-                if (_message != null) ...[
+                  const SizedBox(height: 20),
+                  if (_plans.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'No active paid plans are available right now. Please contact support.',
+                        ),
+                      ),
+                    )
+                  else
+                    ..._plans.map((plan) {
+                      final product = _productForPlan(plan);
+                      final price = double.tryParse(plan['price'].toString()) ?? 0;
+                      final period = plan['billing_period']?.toString() ?? '';
+                      final description = plan['description']?.toString();
+                      final productReady = product != null;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        plan['name'].toString(),
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      product?.price ?? _money.format(price),
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(period.toUpperCase()),
+                                if (description != null && description.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(description),
+                                ],
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton(
+                                    onPressed: _purchaseBusy || !productReady
+                                        ? null
+                                        : () => _buy(plan),
+                                    child: Text(
+                                      productReady
+                                          ? 'Select & pay'
+                                          : 'Payment setup pending',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _purchaseBusy || !_billingAvailable ? null : _restore,
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Restore Google Play purchase'),
+                  ),
+                  if (_message != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _message!,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Text(
-                    _message!,
+                    _billingAvailable
+                        ? 'Payments are processed by Google Play. Access is activated only after server verification.'
+                        : 'Google Play Billing is unavailable on this device or build.',
                     textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-                const SizedBox(height: 20),
-                Text(
-                  _billingAvailable
-                      ? 'Payments are processed by Google Play. Pro access is enabled only after server verification.'
-                      : 'Google Play Billing is unavailable on this device or build.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              ),
             ),
     );
   }
