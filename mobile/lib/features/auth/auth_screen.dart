@@ -92,9 +92,27 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     } on DioException catch (error) {
       final data = error.response?.data;
-      final message = data is Map<String, dynamic> && data['detail'] != null
+      final detail = data is Map<String, dynamic> && data['detail'] != null
           ? data['detail'].toString()
-          : 'Unable to connect to FinPilot. Please try again.';
+          : null;
+
+      if (!_registerMode &&
+          error.response?.statusCode == 403 &&
+          detail == 'Email verification required') {
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(
+              api: widget.api,
+              email: _email.text.trim(),
+            ),
+          ),
+        );
+        return;
+      }
+
+      final message =
+          detail ?? 'Unable to connect to FinPilot. Please try again.';
       if (mounted) setState(() => _error = message);
     } catch (_) {
       if (mounted) {
