@@ -11,7 +11,7 @@ from app.dependencies.auth import get_current_user
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
-from app.models.receivable import Receivable
+from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
 from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
 
@@ -202,6 +202,22 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
                 )
             ).where(Transaction.account_id == account.id, Transaction.user_id == user.id)
         )
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user.id)
+        )
+        movement += receivable_movement or Decimal("0.00")
+
         if account.account_type.value == "card":
             outstanding = account.opening_balance - movement
             if outstanding < 0:
@@ -395,6 +411,21 @@ async def net_worth_summary(
             )
         )
         movement = movement or Decimal("0.00")
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user.id)
+        )
+        movement += receivable_movement or Decimal("0.00")
         if account.account_type.value == "card":
             card_outstanding = account.opening_balance - movement
             if card_outstanding > 0:
