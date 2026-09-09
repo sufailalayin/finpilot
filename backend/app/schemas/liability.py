@@ -17,7 +17,6 @@ class LiabilityCreate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     funding_account_id: uuid.UUID | None = None
-    funding_account_id: uuid.UUID | None = None
 
 
 class LiabilityUpdate(BaseModel):
@@ -29,6 +28,7 @@ class LiabilityUpdate(BaseModel):
     emi_amount: Decimal | None = Field(default=None, ge=0)
     next_due_on: date | None = None
     end_date: date | None = None
+    funding_account_id: uuid.UUID | None = None
 
 
 class LiabilityResponse(BaseModel):
