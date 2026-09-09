@@ -7,6 +7,7 @@ class LiabilityService {
 
   Future<Map<String, dynamic>> overview() async {
     final response = await _api.dio.get('/liabilities/overview/summary');
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -34,6 +35,7 @@ class LiabilityService {
             nextDueOn?.toIso8601String().split('T').first,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> recordPayment({
@@ -52,9 +54,11 @@ class LiabilityService {
         'paid_on': paidOn.toIso8601String().split('T').first,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> deleteLiability(String liabilityId) async {
     await _api.dio.delete('/liabilities/$liabilityId');
+    _api.notifyDataChanged();
   }
 }
