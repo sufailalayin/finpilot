@@ -24,6 +24,7 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
   late final AppSecurityService _security = AppSecurityService();
   bool _unlocked = false;
   bool _lockEnabled = false;
+  bool _securityReady = false;
 
   @override
   void initState() {
@@ -35,7 +36,10 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
   Future<void> _refreshLockState() async {
     final enabled = await _security.isLockEnabled();
     if (!mounted) return;
-    setState(() => _lockEnabled = enabled);
+    setState(() {
+      _lockEnabled = enabled;
+      _securityReady = true;
+    });
   }
 
   @override
@@ -89,6 +93,11 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
           }
 
           if (snapshot.data == true) {
+            if (!_securityReady) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
             if (_lockEnabled && !_unlocked) {
               return AppLockScreen(
                 onUnlocked: () => setState(() => _unlocked = true),
