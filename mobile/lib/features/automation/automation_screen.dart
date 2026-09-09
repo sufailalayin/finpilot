@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/app_error_state.dart';
 import '../finance/finance_service.dart';
 import 'automation_service.dart';
 import 'smart_alerts_screen.dart';
@@ -547,12 +548,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
+            return AppErrorState(
+              error: snapshot.error,
+              onRetry: _refresh,
             );
           }
 
