@@ -57,3 +57,7 @@ export const revokeAdminUserSessions = (userId: string, reason: string) =>
       encodeURIComponent(reason),
     { method: "POST" },
   );
+
+
+export const sendAdminTestEmail = () =>
+  apiRequest("/admin/email/test", { method: "POST" });
