@@ -234,23 +234,6 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
             )
         )
         movement += (liability_inflow or Decimal("0.00")) - (liability_outflow or Decimal("0.00"))
-        liability_inflow = await db.scalar(
-            select(
-                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
-            ).where(
-                Liability.user_id == user.id,
-                Liability.funding_account_id == account.id,
-            )
-        )
-        liability_outflow = await db.scalar(
-            select(
-                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
-            ).where(
-                LiabilityPayment.user_id == user.id,
-                LiabilityPayment.payment_account_id == account.id,
-            )
-        )
-        movement += (liability_inflow or Decimal("0.00")) - (liability_outflow or Decimal("0.00"))
 
         if account.account_type.value == "card":
             outstanding = account.opening_balance - movement
@@ -460,6 +443,23 @@ async def net_worth_summary(
             ).where(ReceivableMovement.user_id == user.id)
         )
         movement += receivable_movement or Decimal("0.00")
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user.id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user.id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        movement += (liability_inflow or Decimal("0.00")) - (liability_outflow or Decimal("0.00"))
         if account.account_type.value == "card":
             card_outstanding = account.opening_balance - movement
             if card_outstanding > 0:
