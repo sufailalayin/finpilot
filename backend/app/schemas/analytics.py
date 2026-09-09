@@ -38,6 +38,7 @@ class AnalyticsOverview(BaseModel):
     net: Decimal
     savings_rate: float
     financial_health_score: int
+    health_score_available: bool
     health_grade: str
     health_components: list[HealthScoreComponent]
     top_categories: list[CategorySpend]
