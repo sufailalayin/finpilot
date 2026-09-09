@@ -7,7 +7,9 @@ const BACKEND_BASE_URL =
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
-  const response = await fetch(BACKEND_BASE_URL.replace(/\/$/, "") + "/auth/login", {
+  const base = BACKEND_BASE_URL.replace(/\/$/, "");
+
+  const response = await fetch(base + "/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body,
@@ -19,16 +21,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: response.status });
   }
   if (!data.user?.is_admin) {
-    return NextResponse.json({ detail: "Administrator access required." }, { status: 403 });
+    return NextResponse.json(
+      { detail: "Administrator access required." },
+      { status: 403 },
+    );
   }
 
-  const result = NextResponse.json({ user: data.user });
-  result.cookies.set("finpilot_admin_session", data.access_token, {
+  const mfa = await fetch(base + "/auth/admin/mfa/request", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer " + data.access_token,
+    },
+    cache: "no-store",
+  });
+  const mfaData = await mfa.json().catch(() => ({}));
+
+  if (!mfa.ok) {
+    return NextResponse.json(mfaData, { status: mfa.status });
+  }
+
+  const result = NextResponse.json({
+    mfa_required: true,
+    email: data.user.email,
+    message: mfaData.message,
+  });
+  result.cookies.set("finpilot_admin_mfa_pending", data.access_token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 8,
+    path: "/api/session",
+    maxAge: 60 * 10,
   });
   return result;
 }
