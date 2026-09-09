@@ -88,6 +88,7 @@ type BillingPlan = {
   name: string;
   access_level: string;
   billing_period: string;
+  google_play_product_id: string | null;
   price: number | string;
   currency: string;
   description: string | null;
@@ -709,13 +710,14 @@ function CreatePlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
   const [code, setCode] = useState("");
   const [price, setPrice] = useState("");
   const [period, setPeriod] = useState("monthly");
+  const [googlePlayProductId, setGooglePlayProductId] = useState("");
   const [access, setAccess] = useState("pro");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
   async function save() {
     try {
-      await createBillingPlan({ code: code.trim().toLowerCase(), name: name.trim(), access_level: access, billing_period: period, price: Number(price), currency: "INR", description: description.trim() || null, features: {}, is_active: true });
+      await createBillingPlan({ code: code.trim().toLowerCase(), name: name.trim(), access_level: access, billing_period: period, google_play_product_id: googlePlayProductId.trim() || null, price: Number(price), currency: "INR", description: description.trim() || null, features: {}, is_active: true });
       await onSaved();
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to create plan"); }
   }
@@ -726,6 +728,7 @@ function CreatePlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       <label className="field"><span>Plan name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="FinPilot Pro Yearly" /></label>
       <label className="field"><span>Plan code</span><input value={code} onChange={(e) => setCode(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase())} placeholder="pro_yearly" /></label>
       <label className="field"><span>Price (INR)</span><input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+      <label className="field"><span>Google Play product ID</span><input value={googlePlayProductId} onChange={(e) => setGooglePlayProductId(e.target.value.trim())} placeholder="finpilot_pro_monthly" /></label>
       <label className="field"><span>Billing period</span><select value={period} onChange={(e) => setPeriod(e.target.value)}><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="lifetime">Lifetime</option><option value="custom">Custom</option></select></label>
       <label className="field"><span>Access level</span><select value={access} onChange={(e) => setAccess(e.target.value)}><option value="pro">Pro</option><option value="free">Free</option></select></label>
     </div>
