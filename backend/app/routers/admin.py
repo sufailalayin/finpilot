@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,18 +11,22 @@ from app.models.asset import Asset
 from app.models.finance import FinanceAccount, Transaction
 from app.models.liability import Liability
 from app.models.user import (
+    AdminActionLog,
     Entitlement,
     EntitlementStatus,
     PlanCode,
     SecurityAuditEvent,
     User,
+    UserStatus,
 )
 from app.schemas.admin import (
+    AdminActionLogRow,
     AdminAIUsageSummary,
     AdminOverview,
     AdminSecurityEventRow,
     AdminSubscriptionSummary,
     AdminUserRow,
+    AdminUserUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -30,6 +34,31 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _request_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:64]
+    if request.client:
+        return request.client.host[:64]
+    return None
+
+
+def _user_agent(request: Request) -> str | None:
+    value = request.headers.get("user-agent")
+    return value[:500] if value else None
+
+
+def _state(user: User, entitlement: Entitlement | None) -> dict:
+    return {
+        "user_status": user.status.value,
+        "plan_code": entitlement.plan_code.value if entitlement else None,
+        "entitlement_status": entitlement.status.value if entitlement else None,
+        "trial_ends_at": entitlement.trial_ends_at.isoformat() if entitlement and entitlement.trial_ends_at else None,
+        "paid_until": entitlement.paid_until.isoformat() if entitlement and entitlement.paid_until else None,
+        "token_version": user.token_version,
+    }
 
 
 @router.get("/overview", response_model=AdminOverview)
@@ -221,4 +250,199 @@ async def security_events(
             created_at=event.created_at,
         )
         for event, email in rows.all()
+    ]
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserRow)
+async def update_user(
+    user_id: str,
+    payload: AdminUserUpdate,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminUserRow:
+    import uuid
+
+    try:
+        target_id = uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user id") from exc
+
+    result = await db.execute(
+        select(User, Entitlement)
+        .outerjoin(Entitlement, Entitlement.user_id == User.id)
+        .where(User.id == target_id)
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user, entitlement = row
+    before = _state(user, entitlement)
+
+    if payload.user_status is not None:
+        try:
+            new_status = UserStatus(payload.user_status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid user status") from exc
+        if user.id == admin.id and new_status != UserStatus.ACTIVE:
+            raise HTTPException(status_code=400, detail="You cannot suspend your own admin account")
+        if user.status != new_status:
+            user.status = new_status
+            user.token_version += 1
+
+    entitlement_fields_requested = any(
+        value is not None
+        for value in (
+            payload.plan_code,
+            payload.entitlement_status,
+            payload.trial_ends_at,
+            payload.paid_until,
+        )
+    )
+    if entitlement is None and entitlement_fields_requested:
+        entitlement = Entitlement(user_id=user.id)
+        db.add(entitlement)
+        await db.flush()
+
+    if entitlement is not None:
+        if payload.plan_code is not None:
+            try:
+                entitlement.plan_code = PlanCode(payload.plan_code)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid plan code") from exc
+        if payload.entitlement_status is not None:
+            try:
+                entitlement.status = EntitlementStatus(payload.entitlement_status)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid entitlement status") from exc
+        if "trial_ends_at" in payload.model_fields_set:
+            entitlement.trial_ends_at = payload.trial_ends_at
+        if "paid_until" in payload.model_fields_set:
+            entitlement.paid_until = payload.paid_until
+
+    after = _state(user, entitlement)
+    if before == after:
+        raise HTTPException(status_code=400, detail="No changes supplied")
+
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=user.id,
+            action="user_access_updated",
+            reason=payload.reason.strip(),
+            before_state=before,
+            after_state=after,
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="admin_access_change",
+            description=f"Administrator changed account or plan access. Reason: {payload.reason.strip()}",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+
+    return AdminUserRow(
+        id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        user_status=user.status.value,
+        is_admin=user.is_admin,
+        entitlement_status=entitlement.status.value if entitlement else None,
+        plan_code=entitlement.plan_code.value if entitlement else None,
+        trial_ends_at=entitlement.trial_ends_at if entitlement else None,
+        paid_until=entitlement.paid_until if entitlement else None,
+        created_at=user.created_at,
+    )
+
+
+@router.post("/users/{user_id}/revoke-sessions")
+async def revoke_user_sessions(
+    user_id: str,
+    request: Request,
+    reason: str = Query(min_length=3, max_length=300),
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    import uuid
+
+    try:
+        target_id = uuid.UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+
+    user = await db.scalar(select(User).where(User.id == target_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    before = {"token_version": user.token_version}
+    user.token_version += 1
+    after = {"token_version": user.token_version}
+
+    db.add(
+        AdminActionLog(
+            actor_admin_id=admin.id,
+            target_user_id=user.id,
+            action="sessions_revoked",
+            reason=reason.strip(),
+            before_state=before,
+            after_state=after,
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="sessions_revoked_by_admin",
+            description=f"All active sessions revoked by administrator. Reason: {reason.strip()}",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/action-logs", response_model=list[AdminActionLogRow])
+async def action_logs(
+    limit: int = Query(default=200, ge=1, le=500),
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminActionLogRow]:
+    actor = User.__table__.alias("actor")
+    target = User.__table__.alias("target")
+    rows = await db.execute(
+        select(
+            AdminActionLog,
+            actor.c.email.label("actor_email"),
+            target.c.email.label("target_email"),
+        )
+        .outerjoin(actor, actor.c.id == AdminActionLog.actor_admin_id)
+        .outerjoin(target, target.c.id == AdminActionLog.target_user_id)
+        .order_by(AdminActionLog.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        AdminActionLogRow(
+            id=str(log.id),
+            actor_admin_id=str(log.actor_admin_id) if log.actor_admin_id else None,
+            actor_admin_email=actor_email,
+            target_user_id=str(log.target_user_id) if log.target_user_id else None,
+            target_user_email=target_email,
+            action=log.action,
+            reason=log.reason,
+            before_state=log.before_state,
+            after_state=log.after_state,
+            ip_address=log.ip_address,
+            user_agent=log.user_agent,
+            created_at=log.created_at,
+        )
+        for log, actor_email, target_email in rows.all()
     ]
