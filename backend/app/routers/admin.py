@@ -95,6 +95,9 @@ async def overview(
     security_events_24h = await db.scalar(
         select(func.count(SecurityAuditEvent.id)).where(SecurityAuditEvent.created_at >= day_ago)
     ) or 0
+    unverified_users = await db.scalar(
+        select(func.count(User.id)).where(User.email_verified.is_(False))
+    ) or 0
 
     return AdminOverview(
         total_users=total_users,
@@ -108,6 +111,7 @@ async def overview(
         assets=assets,
         liabilities=liabilities,
         security_events_24h=security_events_24h,
+        unverified_users=unverified_users,
     )
 
 
@@ -142,6 +146,7 @@ async def users(
             full_name=user.full_name,
             user_status=user.status.value,
             is_admin=user.is_admin,
+            email_verified=user.email_verified,
             entitlement_status=entitlement.status.value if entitlement else None,
             plan_code=entitlement.plan_code.value if entitlement else None,
             trial_ends_at=entitlement.trial_ends_at if entitlement else None,
@@ -366,6 +371,7 @@ async def update_user(
         full_name=user.full_name,
         user_status=user.status.value,
         is_admin=user.is_admin,
+        email_verified=user.email_verified,
         entitlement_status=entitlement.status.value if entitlement else None,
         plan_code=entitlement.plan_code.value if entitlement else None,
         trial_ends_at=entitlement.trial_ends_at if entitlement else None,
