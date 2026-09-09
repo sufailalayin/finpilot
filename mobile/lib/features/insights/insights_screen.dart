@@ -62,6 +62,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
           final data = snapshot.data!;
           final score = data['financial_health_score'] as int? ?? 0;
+          final healthScoreAvailable =
+              data['health_score_available'] == true;
           final savingsRate =
               double.tryParse(data['savings_rate'].toString()) ?? 0;
           final healthGrade = data['health_grade']?.toString() ?? 'Not rated';
@@ -92,12 +94,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           fit: StackFit.expand,
                           children: [
                             CircularProgressIndicator(
-                              value: score / 100,
+                              value: healthScoreAvailable ? score / 100 : 0,
                               strokeWidth: 9,
                             ),
                             Center(
                               child: Text(
-                                score.toString(),
+                                healthScoreAvailable ? score.toString() : '—',
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w900,
@@ -118,14 +120,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              healthGrade,
+                              healthScoreAvailable
+                                  ? healthGrade
+                                  : 'Not enough data',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Savings rate: ' +
-                                  savingsRate.toStringAsFixed(1) +
-                                  '%',
+                              healthScoreAvailable
+                                  ? 'Savings rate: ' +
+                                      savingsRate.toStringAsFixed(1) +
+                                      '%'
+                                  : 'Add income or expenses to calculate your score.',
                             ),
                           ],
                         ),
