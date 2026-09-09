@@ -66,8 +66,6 @@ class ReceivableService {
     await _api.dio.delete('/receivables/$id');
     _api.notifyDataChanged();
   }
-}
-
 
   Future<List<Map<String, dynamic>>> accounts() async {
     final response = await _api.dio.get('/finance/accounts/balances');
@@ -102,3 +100,4 @@ class ReceivableService {
     );
     _api.notifyDataChanged();
   }
+}
