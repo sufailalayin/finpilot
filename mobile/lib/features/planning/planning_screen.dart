@@ -109,7 +109,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
                 goalType: goalType,
                 targetDate: targetDate,
               );
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(context).pop(true);
             },
             child: const Text('Save'),
           ),
@@ -118,9 +120,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
       ),
     );
 
-    name.dispose();
-    target.dispose();
-    current.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      target.dispose();
+      current.dispose();
+    });
 
     if (saved == true) setState(_reload);
   }
@@ -155,7 +159,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
                 periodStart: start,
                 periodEnd: end,
               );
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(context).pop(true);
             },
             child: const Text('Save'),
           ),
@@ -163,8 +169,10 @@ class _PlanningScreenState extends State<PlanningScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+    });
 
     if (saved == true) setState(_reload);
   }
@@ -230,7 +238,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
                     80,
               );
 
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(context).pop(true);
             },
             child: const Text('Save changes'),
           ),
@@ -238,8 +248,10 @@ class _PlanningScreenState extends State<PlanningScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+    });
 
     if (saved == true) {
       setState(_reload);
@@ -350,7 +362,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
                 targetDate: targetDate,
               );
 
-              if (context.mounted) Navigator.pop(context, true);
+              if (!context.mounted) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(context).pop(true);
             },
             child: const Text('Save changes'),
           ),
@@ -358,9 +372,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
       ),
     );
 
-    name.dispose();
-    target.dispose();
-    current.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      target.dispose();
+      current.dispose();
+    });
 
     if (saved == true) {
       setState(_reload);
