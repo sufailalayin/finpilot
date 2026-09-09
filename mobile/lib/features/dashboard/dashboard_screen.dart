@@ -632,6 +632,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
+                if (data.upcomingBills.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Upcoming payments',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PlanningScreen(api: widget.api),
+                          ),
+                        ),
+                        child: const Text('Manage'),
+                      ),
+                    ],
+                  ),
+                  ...data.upcomingBills.take(3).map((raw) {
+                    final bill = Map<String, dynamic>.from(raw as Map);
+                    final amount =
+                        double.tryParse(bill['amount'].toString()) ?? 0;
+                    final isCard = bill['bill_type'] == 'credit_card';
+                    final last4 = bill['card_last4']?.toString();
+                    final generated = bill['bill_generated_on']?.toString();
+
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(
+                          isCard
+                              ? Icons.credit_card_outlined
+                              : Icons.receipt_long_outlined,
+                        ),
+                        title: Text(
+                          bill['name'].toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(
+                          isCard
+                              ? [
+                                  if (last4 != null && last4.isNotEmpty)
+                                    '•••• ' + last4,
+                                  if (generated != null)
+                                    'Statement ' + generated,
+                                  'Pay by ' + bill['due_on'].toString(),
+                                ].join(' • ')
+                              : 'Due ' + bill['due_on'].toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 100),
+                          child: Text(
+                            _money.format(amount),
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
                 if (data.alerts.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Row(
