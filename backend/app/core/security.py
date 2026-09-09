@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 
 from app.core.config import get_settings
@@ -46,7 +47,7 @@ def decode_access_token(token: str) -> str | None:
             issuer=settings.jwt_issuer,
             audience=settings.jwt_audience,
         )
-    except JWTError:
+    except InvalidTokenError:
         return None
     if payload.get("type") != "access":
         return None
@@ -64,7 +65,7 @@ def decode_access_token_claims(token: str) -> dict | None:
             issuer=settings.jwt_issuer,
             audience=settings.jwt_audience,
         )
-    except JWTError:
+    except InvalidTokenError:
         return None
     if payload.get("type") != "access":
         return None
