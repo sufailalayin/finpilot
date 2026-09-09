@@ -10,6 +10,7 @@ import {
   fetchAdminSubscriptions,
   fetchAdminUsers,
   revokeAdminUserSessions,
+  sendAdminTestEmail,
   updateAdminUser,
 } from "../lib/api";
 
@@ -179,6 +180,21 @@ export default function AdminDashboard() {
     router.refresh();
   }
 
+  async function testEmailDelivery() {
+    setError("");
+    try {
+      const result = await sendAdminTestEmail();
+      window.alert(
+        "Test email sent to " +
+          (result?.recipient ?? "your admin email") +
+          ". Check the inbox and spam folder.",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to send test email");
+    }
+  }
+
   const kpis = [
     ["Total users", overview?.total_users ?? "—", `${overview?.registrations_7d ?? "—"} joined in 7 days`],
     ["Paid subscribers", overview?.paid_users ?? "—", "Active Pro access"],
@@ -235,6 +251,7 @@ export default function AdminDashboard() {
           </div>
           <div className="actions">
             <button className="btn" onClick={load}>{loading ? "Refreshing…" : "Refresh data"}</button>
+            <button className="btn" onClick={testEmailDelivery}>Test email delivery</button>
             <button className="btn btn-danger" onClick={logout}>Sign out</button>
           </div>
         </header>
