@@ -22,7 +22,8 @@ from app.models.user import (
     UserLocation,
     UserStatus,
 )
-from app.services.subscriptions import apply_manual_plan_change
+from app.services.subscriptions import apply_manual_plan_change, normalize_paid_entitlement
+from app.services.trials import normalize_entitlement
 from app.services.email_delivery import EmailDeliveryError, send_test_email
 from app.schemas.admin import (
     AdminActionLogRow,
@@ -397,6 +398,10 @@ async def update_user(
                 entitlement.paid_until = now + timedelta(days=365)
             elif selected_billing_plan.billing_period == "lifetime":
                 entitlement.paid_until = None
+
+    if entitlement is not None:
+        normalize_entitlement(entitlement)
+        normalize_paid_entitlement(entitlement)
 
     after = _state(user, entitlement)
     if before == after:
