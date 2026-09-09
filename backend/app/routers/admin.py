@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.request_meta import client_ip, user_agent
 from app.db.session import get_db
 from app.dependencies.admin import get_current_admin
 from app.models.ai import AIUsageEvent
@@ -47,20 +48,6 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _request_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    if request.client:
-        return request.client.host[:64]
-    return None
-
-
-def _user_agent(request: Request) -> str | None:
-    value = request.headers.get("user-agent")
-    return value[:500] if value else None
 
 
 def _state(user: User, entitlement: Entitlement | None) -> dict:
@@ -415,8 +402,8 @@ async def update_user(
             reason=payload.reason.strip(),
             before_state=before,
             after_state=after,
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     db.add(
@@ -424,8 +411,8 @@ async def update_user(
             user_id=user.id,
             event_type="admin_access_change",
             description=f"Administrator changed account or plan access. Reason: {payload.reason.strip()}",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -478,8 +465,8 @@ async def revoke_user_sessions(
             reason=reason.strip(),
             before_state=before,
             after_state=after,
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     db.add(
@@ -487,8 +474,8 @@ async def revoke_user_sessions(
             user_id=user.id,
             event_type="sessions_revoked_by_admin",
             description=f"All active sessions revoked by administrator. Reason: {reason.strip()}",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -553,8 +540,8 @@ async def test_email_delivery(
             user_id=admin.id,
             event_type="email_delivery_test",
             description="Administrator sent a FinPilot email delivery test.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -629,8 +616,8 @@ async def create_billing_plan(
                 "price": str(plan.price),
                 "currency": plan.currency,
             },
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -767,8 +754,8 @@ async def record_payment(
                 "reference": payment.reference,
                 "billing_plan_id": str(plan_id) if plan_id else None,
             },
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -887,8 +874,8 @@ async def update_user_location(
             reason=payload.reason.strip(),
             before_state=before,
             after_state=after,
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -930,8 +917,8 @@ async def delete_user_account(
             reason=payload.reason.strip(),
             before_state=before,
             after_state=after,
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     db.add(
@@ -939,8 +926,8 @@ async def delete_user_account(
             user_id=user.id,
             event_type="account_deleted_by_admin",
             description=f"Account disabled/deleted by administrator. Reason: {payload.reason.strip()}",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
