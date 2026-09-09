@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.request_meta import client_ip, user_agent
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -25,20 +26,6 @@ from app.schemas.security_privacy import (
 )
 
 router = APIRouter(prefix="/security", tags=["security"])
-
-
-def _request_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    if request.client:
-        return request.client.host[:64]
-    return None
-
-
-def _user_agent(request: Request) -> str | None:
-    value = request.headers.get("user-agent")
-    return value[:500] if value else None
 
 
 def _jsonable(value):
@@ -96,8 +83,8 @@ async def revoke_sessions(
             user_id=user.id,
             event_type="sessions_revoked",
             description="All previous access tokens were revoked.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -113,7 +100,16 @@ async def export_account_data(
     db: AsyncSession = Depends(get_db),
 ) -> DataExportResponse:
     data = {
-        "profile": _model_row(user),
+        "profile": {
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "status": user.status.value,
+            "is_admin": user.is_admin,
+            "email_verified": user.email_verified,
+            "created_at": user.created_at.isoformat(),
+            "updated_at": user.updated_at.isoformat(),
+        },
         "accounts": await _rows(db, FinanceAccount, user.id),
         "categories": await _rows(db, Category, user.id),
         "transactions": await _rows(db, Transaction, user.id),
@@ -133,8 +129,8 @@ async def export_account_data(
             user_id=user.id,
             event_type="data_exported",
             description="Account data export generated.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -167,8 +163,8 @@ async def delete_account(
             user_id=user.id,
             event_type="account_deleted",
             description="User requested permanent account deletion.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.flush()
