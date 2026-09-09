@@ -21,8 +21,7 @@ from app.schemas.automation import (
     BillCreate,
     BillResponse,
     BillUpdate,
-    CreditCardStatementCreate
-
+    CreditCardStatementCreate,
     RecurringRuleCreate,
     RecurringRuleResponse,
     RecurringRuleUpdate,
