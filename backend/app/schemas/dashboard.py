@@ -46,6 +46,15 @@ class DashboardAlert(BaseModel):
     due_on: date | None = None
 
 
+class DashboardCashflowPoint(BaseModel):
+    month: str
+    income: Decimal
+    expenses: Decimal
+    net: Decimal
+    savings_rate: float
+    net_worth: Decimal
+
+
 class DashboardGoal(BaseModel):
     id: str
     name: str
@@ -93,3 +102,5 @@ class DashboardResponse(BaseModel):
     upcoming_bills: list[DashboardUpcomingBill]
     goals: list[DashboardGoal]
     emergency_fund: DashboardEmergencyFund
+    cashflow_trend: list[DashboardCashflowPoint]
+    cashflow_direction: str
