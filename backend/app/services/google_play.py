@@ -126,18 +126,6 @@ class GooglePlayVerifier:
         if not settings.google_play_package_name:
             raise RuntimeError("Google Play package name is not configured")
 
-        allowed_products = {
-            settings.google_play_monthly_product_id,
-            settings.google_play_yearly_product_id,
-        }
-        if product_id not in allowed_products:
-            return PlayVerificationResult(
-                verified=False,
-                product_id=product_id,
-                expiry_time=None,
-                purchase_state="PRODUCT_NOT_ALLOWED",
-            )
-
         token = await self._access_token()
         package_name = quote(settings.google_play_package_name, safe="")
         purchase_token_encoded = quote(purchase_token, safe="")
