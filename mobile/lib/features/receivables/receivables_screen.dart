@@ -43,8 +43,15 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
     final amount = TextEditingController();
     final note = TextEditingController();
     final accounts = await _service.accounts();
-    String sourceType = 'outside';
-    String? sourceAccountId;
+    final cashBankAccounts = accounts
+        .where((row) =>
+            row['account_type']?.toString() == 'cash' ||
+            row['account_type']?.toString() == 'bank')
+        .toList();
+    String sourceType = cashBankAccounts.isEmpty ? 'outside' : 'account';
+    String? sourceAccountId = cashBankAccounts.isEmpty
+        ? null
+        : cashBankAccounts.first['id'].toString();
     DateTime givenOn = DateTime.now();
     DateTime? dueOn;
 
@@ -112,9 +119,7 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                     decoration: const InputDecoration(
                       labelText: 'Select cash / bank account',
                     ),
-                    items: accounts
-                        .where((row) => row['account_type']?.toString() != 'card')
-                        .map(
+                    items: cashBankAccounts.map(
                           (row) => DropdownMenuItem<String>(
                             value: row['id'].toString(),
                             child: Text(
@@ -198,6 +203,18 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                     value <= 0 ||
                     (sourceType == 'account' && sourceAccountId == null)) {
                   return;
+                }
+                if (sourceType == 'account') {
+                  final selected = cashBankAccounts.firstWhere(
+                    (row) => row['id'].toString() == sourceAccountId,
+                  );
+                  final available = double.tryParse(
+                        selected['current_balance']?.toString() ?? '0',
+                      ) ??
+                      0;
+                  if (value > available) {
+                    return;
+                  }
                 }
 
                 await _service.create(
@@ -301,7 +318,9 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                     labelText: 'Select cash / bank account',
                   ),
                   items: accounts
-                      .where((row) => row['account_type']?.toString() != 'card')
+                      .where((row) =>
+                          row['account_type']?.toString() == 'cash' ||
+                          row['account_type']?.toString() == 'bank')
                       .map(
                         (row) => DropdownMenuItem<String>(
                           value: row['id'].toString(),
@@ -426,7 +445,9 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                   labelText: source ? 'From account' : 'To account',
                 ),
                 items: accounts
-                    .where((row) => row['account_type']?.toString() != 'card')
+                    .where((row) =>
+                        row['account_type']?.toString() == 'cash' ||
+                        row['account_type']?.toString() == 'bank')
                     .map(
                       (row) => DropdownMenuItem<String>(
                         value: row['id'].toString(),
