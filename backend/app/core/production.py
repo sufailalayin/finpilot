@@ -43,6 +43,18 @@ def validate_production_settings(settings: Settings) -> None:
     if settings.jwt_algorithm != "HS256":
         missing.append("FINPILOT_JWT_ALGORITHM must be HS256")
 
+    email_mode = settings.email_delivery_mode.lower()
+    if email_mode == "resend":
+        if not settings.resend_api_key or not settings.resend_from_email:
+            missing.append("Resend OTP email configuration")
+    elif email_mode == "smtp":
+        if not settings.smtp_host or not settings.smtp_from_email:
+            missing.append("SMTP OTP email configuration")
+    else:
+        missing.append(
+            "FINPILOT_EMAIL_DELIVERY_MODE must be resend or smtp in production"
+        )
+
     if missing:
         raise ProductionConfigError(
             "Missing or unsafe production configuration: " + ", ".join(missing)
