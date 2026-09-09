@@ -174,6 +174,20 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         ).scalars().all()
     )
 
+    upcoming_bills = [
+        {
+            "id": str(bill.id),
+            "name": bill.name,
+            "bill_type": bill.bill_type,
+            "amount": bill.amount,
+            "due_on": bill.due_on,
+            "bill_generated_on": bill.bill_generated_on,
+            "provider": bill.provider,
+            "card_last4": bill.card_last4,
+        }
+        for bill in bill_rows
+    ]
+
     alerts = []
     for bill in bill_rows:
         days = (bill.due_on - today).days
@@ -256,4 +270,5 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         "upcoming_alert_count": len(alerts),
         "insights": insights,
         "alerts": alerts,
+        "upcoming_bills": upcoming_bills,
     }
