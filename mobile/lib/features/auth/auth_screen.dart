@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../navigation/app_shell.dart';
 import 'auth_service.dart';
+import 'email_verification_screen.dart';
+import 'forgot_password_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.api});
@@ -64,12 +66,23 @@ class _AuthScreenState extends State<AuthScreen> {
           password: _password.text,
           fullName: _name.text,
         );
-      } else {
-        await _auth.login(
-          email: _email.text,
-          password: _password.text,
+
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(
+              api: widget.api,
+              email: _email.text.trim(),
+            ),
+          ),
         );
+        return;
       }
+
+      await _auth.login(
+        email: _email.text,
+        password: _password.text,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -316,7 +329,26 @@ class _AuthScreenState extends State<AuthScreen> {
                                         ),
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              if (!_registerMode) ...[
+                                const SizedBox(height: 4),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _loading
+                                        ? null
+                                        : () => Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    ForgotPasswordScreen(
+                                                  api: widget.api,
+                                                ),
+                                              ),
+                                            ),
+                                    child: const Text('Forgot password?'),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 6),
                               TextButton(
                                 onPressed: _loading ? null : _switchMode,
                                 child: Text(
