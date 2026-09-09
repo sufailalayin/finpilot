@@ -16,16 +16,15 @@ class EmailDeliveryError(RuntimeError):
 
 
 def _otp_html(*, code: str, purpose: str) -> str:
-    heading = (
-        "Verify your email"
-        if purpose == "signup"
-        else "Reset your password"
-    )
-    action = (
-        "Complete your FinPilot signup"
-        if purpose == "signup"
-        else "Use this code to reset your FinPilot password"
-    )
+    if purpose == "signup":
+        heading = "Verify your email"
+        action = "Complete your FinPilot signup"
+    elif purpose == "admin_login":
+        heading = "Administrator verification"
+        action = "Use this code to complete your FinPilot Admin sign-in"
+    else:
+        heading = "Reset your password"
+        action = "Use this code to reset your FinPilot password"
     return f"""<!doctype html>
 <html>
   <body style="margin:0;background:#f4f7f6;font-family:Arial,sans-serif;color:#16231f">
@@ -97,16 +96,15 @@ async def send_otp_email(
     code: str,
     purpose: str,
 ) -> None:
-    subject = (
-        "Verify your FinPilot email"
-        if purpose == "signup"
-        else "Reset your FinPilot password"
-    )
-    action = (
-        "verify your email address"
-        if purpose == "signup"
-        else "reset your password"
-    )
+    if purpose == "signup":
+        subject = "Verify your FinPilot email"
+        action = "verify your email address"
+    elif purpose == "admin_login":
+        subject = "FinPilot Admin verification code"
+        action = "complete your administrator sign-in"
+    else:
+        subject = "Reset your FinPilot password"
+        action = "reset your password"
     body = (
         f"Your FinPilot verification code is: {code}\n\n"
         f"Use this code to {action}. "
