@@ -26,9 +26,16 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
 
     email_mode = settings.email_delivery_mode.lower()
     email_ready = (
-        email_mode == "smtp"
-        and bool(settings.smtp_host)
-        and bool(settings.smtp_from_email)
+        (
+            email_mode == "smtp"
+            and bool(settings.smtp_host)
+            and bool(settings.smtp_from_email)
+        )
+        or (
+            email_mode == "resend"
+            and bool(settings.resend_api_key)
+            and bool(settings.resend_from_email)
+        )
     )
 
     return {
