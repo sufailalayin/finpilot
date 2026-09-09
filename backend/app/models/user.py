@@ -177,6 +177,7 @@ class BillingPlan(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     access_level: Mapped[str] = mapped_column(String(20), default="pro", nullable=False)
     billing_period: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
+    google_play_product_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
