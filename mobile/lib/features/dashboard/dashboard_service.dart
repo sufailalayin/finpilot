@@ -24,6 +24,8 @@ class DashboardData {
     required this.upcomingBills,
     required this.goals,
     required this.emergencyFund,
+    required this.cashflowTrend,
+    required this.cashflowDirection,
   });
 
   final double totalBalance;
@@ -48,6 +50,8 @@ class DashboardData {
   final List<dynamic> upcomingBills;
   final List<dynamic> goals;
   final Map<String, dynamic> emergencyFund;
+  final List<dynamic> cashflowTrend;
+  final String cashflowDirection;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] is Map
@@ -91,6 +95,9 @@ class DashboardData {
       emergencyFund: json['emergency_fund'] is Map
           ? Map<String, dynamic>.from(json['emergency_fund'] as Map)
           : <String, dynamic>{},
+      cashflowTrend: (json['cashflow_trend'] as List<dynamic>?) ?? const [],
+      cashflowDirection:
+          json['cashflow_direction']?.toString() ?? 'stable',
     );
   }
 }
