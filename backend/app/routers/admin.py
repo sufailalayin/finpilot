@@ -160,6 +160,8 @@ async def users(
             email_verified=user.email_verified,
             entitlement_status=entitlement.status.value if entitlement else None,
             plan_code=entitlement.plan_code.value if entitlement else None,
+            billing_plan_id=str(entitlement.billing_plan_id) if entitlement and entitlement.billing_plan_id else None,
+            billing_plan_name=billing_plan.name if billing_plan else None,
             trial_ends_at=entitlement.trial_ends_at if entitlement else None,
             paid_until=entitlement.paid_until if entitlement else None,
             created_at=user.created_at,
@@ -312,6 +314,7 @@ async def update_user(
         value is not None
         for value in (
             payload.plan_code,
+            payload.billing_plan_id,
             payload.entitlement_status,
             payload.trial_ends_at,
             payload.paid_until,
@@ -746,14 +749,15 @@ async def user_detail(
         raise HTTPException(status_code=400, detail="Invalid user id") from exc
 
     row = (await db.execute(
-        select(User, Entitlement, UserLocation)
+        select(User, Entitlement, UserLocation, BillingPlan)
         .outerjoin(Entitlement, Entitlement.user_id == User.id)
         .outerjoin(UserLocation, UserLocation.user_id == User.id)
+        .outerjoin(BillingPlan, BillingPlan.id == Entitlement.billing_plan_id)
         .where(User.id == uid)
     )).first()
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
-    user, entitlement, location = row
+    user, entitlement, location, billing_plan = row
     payments = await list_payments(user_id=str(user.id), limit=50, _=user, db=db)
     return AdminUserDetail(
         user=AdminUserRow(
