@@ -124,7 +124,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   accountType: type,
                   openingBalance: value,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save'),
             ),
@@ -133,8 +135,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
       ),
     );
 
-    name.dispose();
-    opening.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      opening.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
