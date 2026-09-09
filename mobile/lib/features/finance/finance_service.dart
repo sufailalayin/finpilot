@@ -70,6 +70,10 @@ class FinanceService {
     required String name,
     required String accountType,
     required double openingBalance,
+    double? creditLimit,
+    String? cardLast4,
+    int? statementDay,
+    int? paymentDueDay,
   }) async {
     final response = await _api.dio.post(
       '/finance/accounts',
@@ -78,6 +82,10 @@ class FinanceService {
         'account_type': accountType,
         'currency': 'INR',
         'opening_balance': openingBalance,
+        'credit_limit': creditLimit,
+        'card_last4': cardLast4,
+        'statement_day': statementDay,
+        'payment_due_day': paymentDueDay,
       },
     );
     _api.notifyDataChanged();
@@ -89,6 +97,10 @@ class FinanceService {
     required String name,
     required String accountType,
     required double openingBalance,
+    double? creditLimit,
+    String? cardLast4,
+    int? statementDay,
+    int? paymentDueDay,
   }) async {
     await _api.dio.patch(
       '/finance/accounts/$accountId',
@@ -96,6 +108,10 @@ class FinanceService {
         'name': name.trim(),
         'account_type': accountType,
         'opening_balance': openingBalance,
+        'credit_limit': creditLimit,
+        'card_last4': cardLast4,
+        'statement_day': statementDay,
+        'payment_due_day': paymentDueDay,
       },
     );
     _api.notifyDataChanged();
