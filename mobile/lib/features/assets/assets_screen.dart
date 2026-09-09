@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/app_error_state.dart';
 import 'asset_service.dart';
 
 class AssetsScreen extends StatefulWidget {
@@ -243,12 +244,9 @@ class _AssetsScreenState extends State<AssetsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
+            return AppErrorState(
+              error: snapshot.error,
+              onRetry: _refresh,
             );
           }
 
