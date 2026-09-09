@@ -39,7 +39,9 @@ class BillCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     bill_type: str = Field(default="bill", max_length=30)
     provider: str | None = Field(default=None, max_length=120)
+    account_id: uuid.UUID | None = None
     amount: Decimal = Field(gt=0)
+    minimum_due: Decimal | None = Field(default=None, ge=0)
     due_on: date
     bill_generated_on: date | None = None
     card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
@@ -52,7 +54,9 @@ class BillUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     bill_type: str | None = Field(default=None, max_length=30)
     provider: str | None = Field(default=None, max_length=120)
+    account_id: uuid.UUID | None = None
     amount: Decimal | None = Field(default=None, gt=0)
+    minimum_due: Decimal | None = Field(default=None, ge=0)
     due_on: date | None = None
     bill_generated_on: date | None = None
     card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
@@ -65,6 +69,7 @@ class BillUpdate(BaseModel):
 class BillResponse(BillCreate):
     id: uuid.UUID
     is_paid: bool
+    paid_amount: Decimal
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -93,3 +98,19 @@ class AlertOverview(BaseModel):
     warning_count: int
     info_count: int
     alerts: list[SmartAlert]
+
+
+class CreditCardStatementCreate(BaseModel):
+    account_id: uuid.UUID
+    amount: Decimal = Field(gt=0)
+    minimum_due: Decimal | None = Field(default=None, ge=0)
+    generated_on: date
+    due_on: date
+    reminder_days_before: int = Field(default=3, ge=0, le=30)
+
+
+class CreditCardPaymentCreate(BaseModel):
+    payment_account_id: uuid.UUID
+    amount: Decimal = Field(gt=0)
+    occurred_on: date
+    note: str | None = None
