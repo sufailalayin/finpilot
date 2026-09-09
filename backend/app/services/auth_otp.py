@@ -62,7 +62,11 @@ async def issue_otp(
         )
         raise OtpCooldownError(retry)
 
-    code = f"{secrets.randbelow(1_000_000):06d}"
+    code = (
+        settings.otp_test_code
+        if settings.environment == "test" and settings.otp_test_code
+        else f"{secrets.randbelow(1_000_000):06d}"
+    )
     challenge = AuthOtpChallenge(
         email=normalized,
         purpose=purpose,
