@@ -176,6 +176,229 @@ class _AutomationScreenState extends State<AutomationScreen> {
     if (saved == true) await _refresh();
   }
 
+  Future<void> _editBill(Map<String, dynamic> bill) async {
+    final name = TextEditingController(text: bill['name']?.toString() ?? '');
+    final amount = TextEditingController(text: bill['amount']?.toString() ?? '');
+    final provider = TextEditingController(text: bill['provider']?.toString() ?? '');
+    var due = DateTime.tryParse(bill['due_on']?.toString() ?? '') ?? DateTime.now();
+    var frequency = bill['frequency']?.toString() ?? 'once';
+    var billType = bill['bill_type']?.toString() ?? 'bill';
+    var autoRenew = bill['auto_renew'] == true;
+    var reminderDays = double.tryParse(bill['reminder_days_before']?.toString() ?? '3') ?? 3;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Edit bill'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'Bill name')),
+                const SizedBox(height: 12),
+                TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount', prefixText: '₹ ')),
+                const SizedBox(height: 12),
+                TextField(controller: provider, decoration: const InputDecoration(labelText: 'Provider / company')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: billType,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'bill', child: Text('Bill')),
+                    DropdownMenuItem(value: 'subscription', child: Text('Subscription')),
+                    DropdownMenuItem(value: 'emi', child: Text('EMI')),
+                    DropdownMenuItem(value: 'insurance', child: Text('Insurance')),
+                    DropdownMenuItem(value: 'utility', child: Text('Utility')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => billType = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: frequency,
+                  decoration: const InputDecoration(labelText: 'Frequency'),
+                  items: const [
+                    DropdownMenuItem(value: 'once', child: Text('One time')),
+                    DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                    DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                    DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => frequency = value);
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto-renew'),
+                  value: autoRenew,
+                  onChanged: (value) => setLocal(() => autoRenew = value),
+                ),
+                Slider(
+                  min: 0,
+                  max: 14,
+                  divisions: 14,
+                  value: reminderDays.clamp(0, 14),
+                  label: reminderDays.round().toString(),
+                  onChanged: (value) => setLocal(() => reminderDays = value),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Due date'),
+                  subtitle: Text(DateFormat('dd MMM yyyy').format(due)),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+                      initialDate: due,
+                    );
+                    if (picked != null) setLocal(() => due = picked);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final value = double.tryParse(amount.text.trim().replaceAll(',', ''));
+                if (name.text.trim().isEmpty || value == null || value <= 0) return;
+                await _automation.updateBill(
+                  billId: bill['id'].toString(),
+                  name: name.text,
+                  amount: value,
+                  dueOn: due,
+                  frequency: frequency,
+                  billType: billType,
+                  provider: provider.text,
+                  reminderDaysBefore: reminderDays.round(),
+                  autoRenew: autoRenew,
+                );
+                if (context.mounted) Navigator.pop(context, true);
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    name.dispose();
+    amount.dispose();
+    provider.dispose();
+    if (saved == true) await _refresh();
+  }
+
+  Future<void> _editRecurring(Map<String, dynamic> rule) async {
+    final accounts = await _finance.listAccounts();
+    if (!mounted || accounts.isEmpty) return;
+
+    final name = TextEditingController(text: rule['name']?.toString() ?? '');
+    final amount = TextEditingController(text: rule['amount']?.toString() ?? '');
+    var accountId = rule['account_id']?.toString() ?? accounts.first['id'].toString();
+    var type = rule['transaction_type']?.toString() ?? 'expense';
+    var frequency = rule['frequency']?.toString() ?? 'monthly';
+    var nextDue = DateTime.tryParse(rule['next_due_on']?.toString() ?? '') ?? DateTime.now();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Edit recurring item'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+                const SizedBox(height: 12),
+                TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount', prefixText: '₹ ')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: accountId,
+                  decoration: const InputDecoration(labelText: 'Account'),
+                  items: accounts.map((a) => DropdownMenuItem<String>(
+                    value: a['id'].toString(),
+                    child: Text(a['name'].toString()),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => accountId = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'expense', child: Text('Expense')),
+                    DropdownMenuItem(value: 'income', child: Text('Income')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => type = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: frequency,
+                  decoration: const InputDecoration(labelText: 'Frequency'),
+                  items: const [
+                    DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                    DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                    DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => frequency = value);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Next due'),
+                  subtitle: Text(DateFormat('dd MMM yyyy').format(nextDue)),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+                      initialDate: nextDue,
+                    );
+                    if (picked != null) setLocal(() => nextDue = picked);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final value = double.tryParse(amount.text.trim().replaceAll(',', ''));
+                if (name.text.trim().isEmpty || value == null || value <= 0) return;
+                await _automation.updateRecurring(
+                  ruleId: rule['id'].toString(),
+                  accountId: accountId,
+                  name: name.text,
+                  transactionType: type,
+                  amount: value,
+                  frequency: frequency,
+                  nextDueOn: nextDue,
+                  isActive: rule['is_active'] != false,
+                );
+                if (context.mounted) Navigator.pop(context, true);
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    name.dispose();
+    amount.dispose();
+    if (saved == true) await _refresh();
+  }
+
   Future<void> _addRecurring() async {
     final accounts = await _finance.listAccounts();
     if (!mounted) return;
@@ -434,17 +657,25 @@ class _AutomationScreenState extends State<AutomationScreen> {
                             const Icon(Icons.notifications_none_outlined),
                         title: Text(bill['name'].toString()),
                         subtitle: Text('Due ' + bill['due_on'].toString()),
-                        trailing: Text(
-                          _money.format(
-                            double.tryParse(bill['amount'].toString()) ?? 0,
-                          ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (action) async {
+                            final row = Map<String, dynamic>.from(bill as Map);
+                            if (action == 'edit') {
+                              await _editBill(row);
+                            } else if (action == 'paid') {
+                              await _automation.markBillPaid(bill['id'].toString());
+                              await _refresh();
+                            } else if (action == 'delete') {
+                              await _automation.deleteBill(bill['id'].toString());
+                              await _refresh();
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'edit', child: Text('Edit')),
+                            PopupMenuItem(value: 'paid', child: Text('Mark paid')),
+                            PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          ],
                         ),
-                        onTap: () async {
-                          await _automation.markBillPaid(
-                            bill['id'].toString(),
-                          );
-                          await _refresh();
-                        },
                       ),
                     ),
                   ),
@@ -474,11 +705,20 @@ class _AutomationScreenState extends State<AutomationScreen> {
                               ' • next ' +
                               rule['next_due_on'].toString(),
                         ),
-                        trailing: Text(
-                          (rule['transaction_type'] == 'income' ? '+ ' : '- ') +
-                              _money.format(
-                                double.tryParse(rule['amount'].toString()) ?? 0,
-                              ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (action) async {
+                            final row = Map<String, dynamic>.from(rule as Map);
+                            if (action == 'edit') {
+                              await _editRecurring(row);
+                            } else if (action == 'delete') {
+                              await _automation.deleteRecurring(rule['id'].toString());
+                              await _refresh();
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'edit', child: Text('Edit')),
+                            PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          ],
                         ),
                       ),
                     ),
