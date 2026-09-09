@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
-from app.models.finance import Transaction, TransactionType
+from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
 from app.schemas.liability import (
@@ -33,6 +33,19 @@ async def create_liability(
 ) -> LiabilityResponse:
     if payload.outstanding_principal > payload.original_principal:
         raise HTTPException(status_code=400, detail="Outstanding principal cannot exceed original principal")
+
+    if payload.funding_account_id is not None:
+        funding_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.funding_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if funding_account is None:
+            raise HTTPException(status_code=404, detail="Funding account not found")
+        if funding_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(status_code=400, detail="Borrowed money can only be received into Cash or Bank")
+
     item = Liability(user_id=user.id, **payload.model_dump())
     db.add(item)
     await db.commit()
@@ -107,6 +120,18 @@ async def record_payment(
         raise HTTPException(status_code=400, detail="Principal payment exceeds outstanding balance")
     if payload.principal_component + payload.interest_component > payload.amount:
         raise HTTPException(status_code=400, detail="Payment components exceed payment amount")
+
+    if payload.payment_account_id is not None:
+        payment_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.payment_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if payment_account is None:
+            raise HTTPException(status_code=404, detail="Payment account not found")
+        if payment_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(status_code=400, detail="Loan payments can only come from Cash or Bank")
 
     payment = LiabilityPayment(
         liability_id=item.id,
