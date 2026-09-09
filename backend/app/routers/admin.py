@@ -20,6 +20,7 @@ from app.models.user import (
     UserStatus,
 )
 from app.services.subscriptions import apply_manual_plan_change
+from app.services.email_delivery import EmailDeliveryError, send_test_email
 from app.schemas.admin import (
     AdminActionLogRow,
     AdminAIUsageSummary,
@@ -464,3 +465,31 @@ async def action_logs(
         )
         for log, actor_email, target_email in rows.all()
     ]
+
+
+
+@router.post("/email/test")
+async def test_email_delivery(
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    try:
+        await send_test_email(to_email=admin.email)
+    except EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    db.add(
+        SecurityAuditEvent(
+            user_id=admin.id,
+            event_type="email_delivery_test",
+            description="Administrator sent a FinPilot email delivery test.",
+            ip_address=_request_ip(request),
+            user_agent=_user_agent(request),
+        )
+    )
+    await db.commit()
+    return {"status": "sent", "recipient": admin.email}
