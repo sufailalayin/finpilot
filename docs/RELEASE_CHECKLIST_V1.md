@@ -53,11 +53,12 @@ The CI release AAB is a **release-build validation artifact**. Before Play Store
 - [ ] Store listing reviewed.
 - [ ] 512x512 store icon and feature graphic prepared.
 - [ ] Phone screenshots captured from final release candidate.
-- [ ] Privacy-policy URL published.
+- [ ] Privacy-policy URL published (`/privacy` on the public FinPilot web host).
+- [ ] Account-deletion URL published (`/account-deletion` on the public FinPilot web host).
 - [ ] Data Safety form completed from actual production data flows.
 - [ ] Financial-features declarations completed if requested by Play.
 - [ ] Content rating completed.
-- [ ] App access instructions supplied for reviewer if login is required.
+- [ ] App access instructions supplied for reviewer if login is required (`docs/PLAY_REVIEWER_ACCESS.md`).
 - [ ] Subscription products and base plans activated.
 - [ ] Internal testing purchase verification completed.
 - [ ] Closed test completed before production rollout.
