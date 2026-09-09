@@ -108,9 +108,3 @@ class CreditCardStatementCreate(BaseModel):
     due_on: date
     reminder_days_before: int = Field(default=3, ge=0, le=30)
 
-
-class CreditCardPaymentCreate(BaseModel):
-    payment_account_id: uuid.UUID
-    amount: Decimal = Field(gt=0)
-    occurred_on: date
-    note: str | None = None
