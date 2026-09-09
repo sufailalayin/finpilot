@@ -21,7 +21,7 @@ def test_production_rejects_default_jwt_secret():
         validate_production_settings(settings)
 
 
-def test_production_rejects_log_only_email_delivery():
+def test_production_can_start_before_email_provider_is_configured():
     settings = Settings(
         environment="production",
         database_url="postgresql+asyncpg://user:pass@db/finpilot",
@@ -30,8 +30,7 @@ def test_production_rejects_log_only_email_delivery():
         email_delivery_mode="log",
     )
 
-    with pytest.raises(ProductionConfigError):
-        validate_production_settings(settings)
+    validate_production_settings(settings)
 
 
 def test_production_accepts_resend_email_delivery():
