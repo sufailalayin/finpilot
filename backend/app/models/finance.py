@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,10 @@ class FinanceAccount(Base):
     account_type: Mapped[AccountType] = mapped_column(Enum(AccountType, name="account_type"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
     opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"))
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    statement_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payment_due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
