@@ -9,7 +9,7 @@ from app.models.asset import Asset
 from app.models.automation import BillReminder
 from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
-from app.models.planning import Budget
+from app.models.planning import Budget, SavingsGoal
 from app.services.analytics import build_analytics
 
 
@@ -159,6 +159,49 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         if item["status"] in {"warning", "over"}
     )
 
+    goal_rows = list(
+        (
+            await db.execute(
+                select(SavingsGoal)
+                .where(SavingsGoal.user_id == user_id)
+                .order_by(
+                    SavingsGoal.target_date.asc().nullslast(),
+                    SavingsGoal.created_at.asc(),
+                )
+            )
+        ).scalars().all()
+    )
+
+    goals = []
+    for goal in goal_rows:
+        progress = (
+            float(goal.current_amount / goal.target_amount * 100)
+            if goal.target_amount > 0
+            else 0.0
+        )
+        goals.append(
+            {
+                "id": str(goal.id),
+                "name": goal.name,
+                "goal_type": goal.goal_type,
+                "target_amount": goal.target_amount,
+                "current_amount": goal.current_amount,
+                "target_date": goal.target_date,
+                "progress_pct": round(min(max(progress, 0.0), 100.0), 1),
+            }
+        )
+
+    emergency_goal = next(
+        (goal for goal in goals if goal["goal_type"] == "emergency_fund"),
+        None,
+    )
+
+    emergency_months = (
+        float(total_balance / month_expense)
+        if month_expense > 0
+        else None
+    )
+
     bill_rows = list(
         (
             await db.execute(
@@ -271,4 +314,15 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         "insights": insights,
         "alerts": alerts,
         "upcoming_bills": upcoming_bills,
+        "goals": goals,
+        "emergency_fund": {
+            "months_covered": (
+                round(max(emergency_months, 0.0), 1)
+                if emergency_months is not None
+                else None
+            ),
+            "liquid_balance": total_balance,
+            "monthly_expense": month_expense,
+            "goal": emergency_goal,
+        },
     }
