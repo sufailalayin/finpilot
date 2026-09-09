@@ -94,7 +94,7 @@ jobs:
               android:viewportWidth="108"
               android:viewportHeight="108">
               <path
-                  android:fillColor="#185A4A"
+                  android:fillColor="#124D40"
                   android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8Z"/>
               <path
                   android:fillColor="#FFFFFF"
@@ -109,7 +109,7 @@ jobs:
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item>
                   <shape android:shape="rectangle">
-                      <solid android:color="#F7F9F8" />
+                      <solid android:color="#F3F6F5" />
                   </shape>
               </item>
               <item
@@ -128,19 +128,31 @@ jobs:
       - name: Analyze Flutter code
         working-directory: /tmp/finpilot_mobile
         run: flutter analyze --no-fatal-infos
+      - name: Harden generated Android manifest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/finpilot_mobile/android/app/src/main/AndroidManifest.xml")
+          text = p.read_text()
+          text = text.replace(
+              "<application",
+              '<application android:allowBackup="false" android:usesCleartextTraffic="false"',
+              1,
+          )
+          p.write_text(text)
+          PY
       - name: Build debug APK
         working-directory: /tmp/finpilot_mobile
-        run: flutter build apk --debug --dart-define=FINPILOT_API_BASE_URL=https://finpilot-backend-production-1cb7.up.railway.app/api/v1
+        run: flutter build apk --debug --dart-define=FINPILOT_API_BASE_URL=https://api.invalid/finpilot
       - name: Build release validation AAB
         working-directory: /tmp/finpilot_mobile
-        run: flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL=https://finpilot-backend-production-1cb7.up.railway.app/api/v1
+        run: flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL=https://api.invalid/finpilot
       - name: Upload Android validation artifacts
         uses: actions/upload-artifact@v4
         with:
           name: finpilot-android-validation
           path: |
             /tmp/finpilot_mobile/android
-            /tmp/finpilot_mobile/build/app/outputs/flutter-apk/app-debug.apk
             /tmp/finpilot_mobile/build/app/outputs/bundle/release/app-release.aab
 
 
