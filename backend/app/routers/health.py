@@ -38,8 +38,37 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
         )
     )
 
+    google_play_ready = all(
+        (
+            settings.google_play_package_name,
+            settings.google_play_monthly_product_id,
+            settings.google_play_yearly_product_id,
+            settings.google_play_service_account_json,
+        )
+    )
+    ai_ready = bool(settings.openai_api_key)
+    cors_ready = bool(
+        settings.cors_origins
+        and "localhost" not in settings.cors_origins.lower()
+    )
+    production_ready = all(
+        (
+            email_ready,
+            google_play_ready,
+            ai_ready,
+            cors_ready,
+            settings.environment == "production",
+        )
+    )
+
     return {
         "status": "ready",
+        "database": "ready",
+        "environment": settings.environment,
         "email_delivery": "ready" if email_ready else "not_configured",
         "email_mode": email_mode,
+        "google_play": "ready" if google_play_ready else "not_configured",
+        "ai": "ready" if ai_ready else "not_configured",
+        "cors": "ready" if cors_ready else "review_required",
+        "production_release": "ready" if production_ready else "blocked",
     }
