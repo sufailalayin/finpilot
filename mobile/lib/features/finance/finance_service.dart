@@ -7,6 +7,7 @@ class FinanceService {
 
   Future<Map<String, dynamic>> netWorthSummary() async {
     final response = await _api.dio.get('/finance/net-worth');
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -36,6 +37,7 @@ class FinanceService {
         'transaction_type': transactionType,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> updateCategory({
@@ -46,14 +48,17 @@ class FinanceService {
       '/finance/categories/$categoryId',
       data: {'name': name.trim()},
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> deleteCategory(String categoryId) async {
     await _api.dio.delete('/finance/categories/$categoryId');
+    _api.notifyDataChanged();
   }
 
   Future<List<dynamic>> bootstrapCategories() async {
     final response = await _api.dio.post('/finance/categories/bootstrap');
+    _api.notifyDataChanged();
     return response.data as List<dynamic>;
   }
 
@@ -76,6 +81,7 @@ class FinanceService {
         'opening_balance': openingBalance,
       },
     );
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -93,14 +99,17 @@ class FinanceService {
         'opening_balance': openingBalance,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> deleteAccount(String accountId) async {
     await _api.dio.delete('/finance/accounts/$accountId');
+    _api.notifyDataChanged();
   }
 
   Future<void> deleteTransaction(String transactionId) async {
     await _api.dio.delete('/finance/transactions/$transactionId');
+    _api.notifyDataChanged();
   }
 
   Future<void> updateTransaction({
@@ -125,6 +134,7 @@ class FinanceService {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> createTransfer({
@@ -144,6 +154,7 @@ class FinanceService {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<Map<String, dynamic>> createTransaction({
@@ -167,6 +178,7 @@ class FinanceService {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
       },
     );
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 }
