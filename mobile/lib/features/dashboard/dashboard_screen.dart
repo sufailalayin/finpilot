@@ -277,7 +277,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     _summaryTile(
                       label: 'Health',
-                      value: data.healthScore.toString() + '/100',
+                      value: data.healthScoreAvailable
+                          ? data.healthScore.toString() + '/100'
+                          : 'Not enough data',
                       icon: Icons.favorite_outline,
                     ),
                     const SizedBox(width: 12),
