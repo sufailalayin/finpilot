@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -71,22 +72,39 @@ class OpenAIProvider(AIProvider):
             "\n\nFinance context (JSON):\n" +
             json.dumps(context, ensure_ascii=False)
         )
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://api.openai.com/v1/responses",
-                headers={
-                    "Authorization": "Bearer " + settings.openai_api_key,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model_name,
-                    "instructions": instructions,
-                    "input": user_input,
-                    "max_output_tokens": 700,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
+        last_error: Exception | None = None
+        data = None
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            for attempt in range(2):
+                try:
+                    response = await client.post(
+                        "https://api.openai.com/v1/responses",
+                        headers={
+                            "Authorization": "Bearer " + settings.openai_api_key,
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": self.model_name,
+                            "instructions": instructions,
+                            "input": user_input,
+                            "max_output_tokens": 700,
+                        },
+                    )
+                    if response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
+                        await asyncio.sleep(1.0)
+                        continue
+                    response.raise_for_status()
+                    data = response.json()
+                    break
+                except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError) as exc:
+                    last_error = exc
+                    if attempt == 0:
+                        await asyncio.sleep(1.0)
+                        continue
+                    raise RuntimeError("AI provider is temporarily unavailable") from exc
+
+        if data is None:
+            raise RuntimeError("AI provider returned no response") from last_error
 
         if isinstance(data.get("output_text"), str) and data["output_text"].strip():
             return data["output_text"].strip()
