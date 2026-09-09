@@ -39,6 +39,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _revision = widget.api.dataRevision.value;
     widget.api.dataRevision.addListener(_handleRevision);
     widget.api.sessionExpired.addListener(_handleSessionExpired);
+    widget.api.subscriptionExpired.addListener(_handleSubscriptionExpired);
     _syncEntitlement();
     _entitlementTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -83,6 +84,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() => _revision = widget.api.dataRevision.value);
   }
 
+  void _handleSubscriptionExpired() {
+    if (!mounted || widget.api.subscriptionExpired.value != true) return;
+    widget.api.subscriptionExpired.value = false;
+    setState(() {
+      _entitlementStatus = 'expired';
+    });
+  }
+
   void _handleSessionExpired() {
     if (!mounted || widget.api.sessionExpired.value != true) return;
     widget.api.sessionExpired.value = false;
@@ -105,6 +114,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _entitlementTimer?.cancel();
     widget.api.dataRevision.removeListener(_handleRevision);
     widget.api.sessionExpired.removeListener(_handleSessionExpired);
+    widget.api.subscriptionExpired.removeListener(_handleSubscriptionExpired);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
