@@ -16,6 +16,7 @@ class AIScreen extends StatefulWidget {
 class _AIScreenState extends State<AIScreen> {
   late final AIService _ai = AIService(widget.api);
   final _question = TextEditingController();
+  final _scroll = ScrollController();
 
   final List<Map<String, String>> _messages = [
     {
@@ -25,6 +26,17 @@ class _AIScreenState extends State<AIScreen> {
   ];
 
   bool _loading = false;
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   final _prompts = const [
     'Can I afford a ₹25,000 purchase this month?',
@@ -47,6 +59,7 @@ class _AIScreenState extends State<AIScreen> {
           'text': 'Copilot Brief\n\n' + answer,
         });
       });
+      _scrollToLatest();
     } on DioException catch (error) {
       final detail = error.response?.data;
       final message = detail is Map<String, dynamic> && detail['detail'] != null
@@ -54,6 +67,7 @@ class _AIScreenState extends State<AIScreen> {
           : 'FinPilot AI is unavailable right now.';
       if (!mounted) return;
       setState(() => _messages.add({'role': 'assistant', 'text': message}));
+      _scrollToLatest();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -68,11 +82,13 @@ class _AIScreenState extends State<AIScreen> {
       _question.clear();
       _loading = true;
     });
+    _scrollToLatest();
 
     try {
       final answer = await _ai.ask(question);
       if (!mounted) return;
       setState(() => _messages.add({'role': 'assistant', 'text': answer}));
+      _scrollToLatest();
     } on DioException catch (error) {
       final detail = error.response?.data;
       final message = detail is Map<String, dynamic> && detail['detail'] != null
@@ -88,6 +104,7 @@ class _AIScreenState extends State<AIScreen> {
   @override
   void dispose() {
     _question.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -99,6 +116,7 @@ class _AIScreenState extends State<AIScreen> {
         children: [
           Expanded(
             child: ListView(
+              controller: _scroll,
               padding: const EdgeInsets.all(16),
               children: [
                 Container(
