@@ -15,22 +15,25 @@ def test_production_rejects_default_jwt_secret():
         database_url="postgresql+asyncpg://user:pass@db/finpilot",
         cors_origins="https://admin.example.com",
         jwt_secret="change-me-in-production",
+        otp_test_code="",
     )
 
     with pytest.raises(ProductionConfigError):
         validate_production_settings(settings)
 
 
-def test_production_can_start_before_email_provider_is_configured():
+def test_production_rejects_log_only_email_delivery():
     settings = Settings(
         environment="production",
         database_url="postgresql+asyncpg://user:pass@db/finpilot",
         cors_origins="https://admin.example.com",
-        jwt_secret="a-very-long-production-secret",
+        jwt_secret="a-very-long-production-secret-that-is-over-32-characters",
+        otp_test_code="",
         email_delivery_mode="log",
     )
 
-    validate_production_settings(settings)
+    with pytest.raises(ProductionConfigError):
+        validate_production_settings(settings)
 
 
 def test_production_accepts_resend_email_delivery():
@@ -38,7 +41,8 @@ def test_production_accepts_resend_email_delivery():
         environment="production",
         database_url="postgresql+asyncpg://user:pass@db/finpilot",
         cors_origins="https://admin.example.com",
-        jwt_secret="a-very-long-production-secret",
+        jwt_secret="a-very-long-production-secret-that-is-over-32-characters",
+        otp_test_code="",
         email_delivery_mode="resend",
         resend_api_key="re_test_key",
         resend_from_email="no-reply@example.com",
