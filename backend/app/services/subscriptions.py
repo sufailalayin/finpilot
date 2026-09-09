@@ -53,10 +53,14 @@ def apply_manual_plan_change(
 
     if entitlement_status is not None:
         entitlement.status = entitlement_status
-        return
+    else:
+        entitlement.status = (
+            EntitlementStatus.ACTIVE
+            if plan_code == PlanCode.PRO
+            else EntitlementStatus.EXPIRED
+        )
 
-    entitlement.status = (
-        EntitlementStatus.ACTIVE
-        if plan_code == PlanCode.PRO
-        else EntitlementStatus.EXPIRED
-    )
+    if entitlement.status == EntitlementStatus.ACTIVE and plan_code == PlanCode.PRO:
+        entitlement.trial_ends_at = None
+    elif entitlement.status != EntitlementStatus.TRIAL:
+        entitlement.trial_ends_at = None
