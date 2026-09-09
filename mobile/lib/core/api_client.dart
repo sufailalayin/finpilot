@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiClient {
   ApiClient({String? baseUrl})
@@ -24,6 +25,13 @@ class ApiClient {
           }
           handler.next(options);
         },
+        onError: (error, handler) async {
+          if (error.response?.statusCode == 401) {
+            await _storage.delete(key: _tokenKey);
+            sessionExpired.value = true;
+          }
+          handler.next(error);
+        },
       ),
     );
   }
@@ -32,6 +40,12 @@ class ApiClient {
 
   final Dio dio;
   final FlutterSecureStorage _storage;
+  final ValueNotifier<int> dataRevision = ValueNotifier<int>(0);
+  final ValueNotifier<bool> sessionExpired = ValueNotifier<bool>(false);
+
+  void notifyDataChanged() {
+    dataRevision.value++;
+  }
 
   Future<void> saveToken(String token) =>
       _storage.write(key: _tokenKey, value: token);
