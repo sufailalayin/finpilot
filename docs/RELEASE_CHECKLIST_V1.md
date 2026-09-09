@@ -11,11 +11,27 @@
 - [ ] Free/Pro API enforcement tests pass.
 - [ ] Security & Privacy routes are registered and reachable.
 
+## Authentication & email
+- [ ] Signup email OTP verification succeeds on a real inbox.
+- [ ] Unverified signup cannot sign in until OTP verification completes.
+- [ ] Pending signup can resume verification after app restart.
+- [ ] OTP expires after configured lifetime and rejects wrong codes.
+- [ ] OTP resend cooldown/rate limit is enforced.
+- [ ] Forgot Password sends a non-enumerating response.
+- [ ] Password reset OTP succeeds on a real inbox.
+- [ ] Successful password reset revokes all old sessions.
+- [ ] Admin shows Verified/Pending email state correctly.
+- [ ] Admin email-delivery self-test succeeds.
+- [ ] Backend /ready reports email_delivery=ready before release.
+
 ## Production configuration
 - [ ] FINPILOT_ENVIRONMENT=production
 - [ ] Strong FINPILOT_JWT_SECRET configured outside source control.
 - [ ] Production database and Redis URLs configured.
 - [ ] CORS restricted to approved production origins.
+- [ ] FINPILOT_EMAIL_DELIVERY_MODE set to resend or smtp.
+- [ ] Production email provider key/SMTP credentials configured outside source control.
+- [ ] Verified sender email/domain configured for OTP delivery.
 - [ ] OpenAI key/model configured for Pro AI.
 - [ ] Google Play package name is com.hastronventures.finpilot.
 - [ ] Google Play monthly/yearly products exist.
@@ -49,6 +65,8 @@ The CI release AAB is a **release-build validation artifact**. Before Play Store
 ## Real-device QA
 - [ ] Fresh registration starts correct trial/free entitlement.
 - [ ] Login/logout and revoked-session behavior work.
+- [ ] Signup OTP screen supports Android autofill/paste.
+- [ ] Forgot Password OTP/reset flow works after app restart and reconnect.
 - [ ] Account/transaction CRUD and transfers persist correctly.
 - [ ] Balances and net worth recalculate correctly.
 - [ ] Budgets/goals work for Free.
