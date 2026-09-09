@@ -215,7 +215,9 @@ class _AssetsScreenState extends State<AssetsScreen> {
                     notes: notes.text,
                   );
                 }
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save'),
             ),
@@ -224,14 +226,18 @@ class _AssetsScreenState extends State<AssetsScreen> {
       ),
     );
 
-    name.dispose();
-    institution.dispose();
-    quantity.dispose();
-    cost.dispose();
-    value.dispose();
-    notes.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      institution.dispose();
+      quantity.dispose();
+      cost.dispose();
+      value.dispose();
+      notes.dispose();
+    });
 
-    if (saved == true) await _refresh();
+    if (saved == true && mounted) {
+      await _refresh();
+    }
   }
 
   @override
