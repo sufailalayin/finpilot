@@ -13,6 +13,7 @@ from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import Receivable
 from app.models.user import User
 from app.schemas.automation import (
     AutomationOverview,
@@ -430,6 +431,50 @@ async def smart_alerts(
                     due_on=bill.due_on,
                     amount=bill.amount,
                     source_id=bill.id,
+                )
+            )
+
+    receivables = list(
+        (
+            await db.execute(
+                select(Receivable).where(
+                    Receivable.user_id == user.id,
+                    Receivable.due_on.is_not(None),
+                    Receivable.amount_received < Receivable.original_amount,
+                )
+            )
+        ).scalars().all()
+    )
+    for receivable in receivables:
+        if receivable.due_on is None:
+            continue
+        remaining = receivable.original_amount - receivable.amount_received
+        days = (receivable.due_on - today).days
+        if days < 0:
+            alerts.append(
+                SmartAlert(
+                    alert_type="receivable_overdue",
+                    severity="warning",
+                    title=receivable.person_name + " return is overdue",
+                    message="₹" + format(remaining, ",.0f") + " is still pending.",
+                    due_on=receivable.due_on,
+                    amount=remaining,
+                    source_id=receivable.id,
+                )
+            )
+        elif days <= 5:
+            alerts.append(
+                SmartAlert(
+                    alert_type="receivable_due",
+                    severity="info" if days > 0 else "warning",
+                    title=receivable.person_name + (" is due today" if days == 0 else " return is due soon"),
+                    message=(
+                        "₹" + format(remaining, ",.0f")
+                        + (" is expected today." if days == 0 else " is expected in " + str(days) + " day(s).")
+                    ),
+                    due_on=receivable.due_on,
+                    amount=remaining,
+                    source_id=receivable.id,
                 )
             )
 
