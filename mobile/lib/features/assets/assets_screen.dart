@@ -35,6 +35,17 @@ class _AssetsScreenState extends State<AssetsScreen> {
     await _future;
   }
 
+  String _prettyAssetType(String value) {
+    return value
+        .split('_')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : part[0].toUpperCase() + part.substring(1),
+        )
+        .join(' ');
+  }
+
   Future<void> _openForm([Map<String, dynamic>? item]) async {
     final name = TextEditingController(text: item?['name']?.toString() ?? '');
     final institution = TextEditingController(
@@ -392,13 +403,12 @@ class _AssetsScreenState extends State<AssetsScreen> {
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         subtitle: Text(
-                          item['asset_type'].toString() +
+                          _prettyAssetType(item['asset_type'].toString()) +
                               ' • Gain ' +
                               _money.format(itemGain),
                         ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               _money.format(current),
@@ -406,8 +416,13 @@ class _AssetsScreenState extends State<AssetsScreen> {
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
+                            const SizedBox(width: 4),
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
+                              ),
                               onSelected: (action) async {
                                 if (action == 'edit') {
                                   await _openForm(item);
