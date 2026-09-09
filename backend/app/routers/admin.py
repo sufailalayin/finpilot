@@ -134,8 +134,9 @@ async def users(
     db: AsyncSession = Depends(get_db),
 ) -> list[AdminUserRow]:
     statement = (
-        select(User, Entitlement)
+        select(User, Entitlement, BillingPlan)
         .outerjoin(Entitlement, Entitlement.user_id == User.id)
+        .outerjoin(BillingPlan, BillingPlan.id == Entitlement.billing_plan_id)
         .order_by(User.created_at.desc())
         .limit(limit)
     )
@@ -166,7 +167,7 @@ async def users(
             paid_until=entitlement.paid_until if entitlement else None,
             created_at=user.created_at,
         )
-        for user, entitlement in rows.all()
+        for user, entitlement, billing_plan in rows.all()
     ]
 
 
