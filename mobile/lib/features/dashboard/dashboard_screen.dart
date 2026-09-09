@@ -316,6 +316,155 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _cashflowTrendCard(DashboardData data) {
+    final points = data.cashflowTrend
+        .map((raw) => Map<String, dynamic>.from(raw as Map))
+        .toList();
+
+    if (points.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    double valueOf(Map<String, dynamic> item, String key) =>
+        double.tryParse(item[key]?.toString() ?? '0') ?? 0;
+
+    double maxValue = 1;
+    for (final item in points) {
+      final income = valueOf(item, 'income').abs();
+      final expense = valueOf(item, 'expenses').abs();
+      if (income > maxValue) maxValue = income;
+      if (expense > maxValue) maxValue = expense;
+    }
+
+    String shortMonth(String value) {
+      final parsed = DateTime.tryParse(value + '-01');
+      if (parsed == null) return value;
+      return DateFormat('MMM').format(parsed);
+    }
+
+    IconData directionIcon = Icons.remove_rounded;
+    if (data.cashflowDirection == 'improving') {
+      directionIcon = Icons.trending_up_rounded;
+    } else if (data.cashflowDirection == 'declining') {
+      directionIcon = Icons.trending_down_rounded;
+    }
+
+    final latest = points.last;
+    final latestNet = valueOf(latest, 'net');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.stacked_bar_chart_outlined),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    '4-month cash flow',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Icon(directionIcon, size: 20),
+                const SizedBox(width: 4),
+                Text(
+                  data.cashflowDirection[0].toUpperCase() +
+                      data.cashflowDirection.substring(1),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Latest net: ' + _money.format(latestNet),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...points.map((item) {
+              final income = valueOf(item, 'income');
+              final expense = valueOf(item, 'expenses');
+              final incomeRatio = (income.abs() / maxValue).clamp(0.0, 1.0);
+              final expenseRatio = (expense.abs() / maxValue).clamp(0.0, 1.0);
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      child: Text(
+                        shortMonth(item['month'].toString()),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: incomeRatio,
+                              minHeight: 7,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: expenseRatio,
+                              minHeight: 7,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 90,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _money.format(income),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          Text(
+                            _money.format(expense),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            Text(
+              'Top bar = income • Bottom bar = expenses',
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -911,6 +1060,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     );
                   }),
+                ],
+                if (data.cashflowTrend.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Cash-flow trend',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => InsightsScreen(api: widget.api),
+                          ),
+                        ),
+                        child: const Text('Reports'),
+                      ),
+                    ],
+                  ),
+                  _cashflowTrendCard(data),
                 ],
                 const SizedBox(height: 22),
                 Text(
