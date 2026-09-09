@@ -42,19 +42,28 @@ class DashboardData {
   final List<dynamic> alerts;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
-    final summary = json['summary'] as Map<String, dynamic>;
-    double money(dynamic value) => double.parse(value.toString());
+    final summary = json['summary'] is Map
+        ? Map<String, dynamic>.from(json['summary'] as Map)
+        : <String, dynamic>{};
+
+    double money(dynamic value) =>
+        double.tryParse(value?.toString() ?? '0') ?? 0;
+
+    int integer(dynamic value) =>
+        int.tryParse(value?.toString() ?? '0') ?? 0;
 
     return DashboardData(
       totalBalance: money(summary['total_balance']),
       monthIncome: money(summary['month_income']),
       monthExpense: money(summary['month_expense']),
       monthNet: money(summary['month_net']),
-      transactionCount: summary['transaction_count'] as int,
+      transactionCount: integer(summary['transaction_count']),
       accounts: (json['accounts'] as List<dynamic>?) ?? const [],
       recentTransactions:
           (json['recent_transactions'] as List<dynamic>?) ?? const [],
-      netWorth: money(json['net_worth']),
+      netWorth: money(
+        json['net_worth'] ?? summary['total_balance'],
+      ),
       investmentAssets: money(json['investment_assets']),
       liabilities: money(json['liabilities']),
       savingsRate: double.tryParse(json['savings_rate'].toString()) ?? 0,
