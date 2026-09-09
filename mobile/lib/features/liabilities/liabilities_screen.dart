@@ -216,6 +216,110 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
     if (saved == true) await _refresh();
   }
 
+  Future<void> _editLiability(Map<String, dynamic> item) async {
+    final name = TextEditingController(text: item['name']?.toString() ?? '');
+    final lender = TextEditingController(text: item['lender']?.toString() ?? '');
+    final outstanding = TextEditingController(
+      text: item['outstanding_principal']?.toString() ?? '',
+    );
+    final rate = TextEditingController(
+      text: item['interest_rate']?.toString() ?? '0',
+    );
+    final emi = TextEditingController(
+      text: item['emi_amount']?.toString() ?? '0',
+    );
+    var type = item['liability_type']?.toString() ?? 'other';
+    DateTime? due = item['next_due_on'] == null
+        ? null
+        : DateTime.tryParse(item['next_due_on'].toString());
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Edit liability'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'personal_loan', child: Text('Personal loan')),
+                    DropdownMenuItem(value: 'home_loan', child: Text('Home loan')),
+                    DropdownMenuItem(value: 'vehicle_loan', child: Text('Vehicle loan')),
+                    DropdownMenuItem(value: 'credit_card', child: Text('Credit card')),
+                    DropdownMenuItem(value: 'business_loan', child: Text('Business loan')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setLocal(() => type = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: lender, decoration: const InputDecoration(labelText: 'Lender')),
+                const SizedBox(height: 12),
+                TextField(controller: outstanding, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Outstanding principal', prefixText: '₹ ')),
+                const SizedBox(height: 12),
+                TextField(controller: rate, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Interest rate %')),
+                const SizedBox(height: 12),
+                TextField(controller: emi, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Monthly EMI', prefixText: '₹ ')),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Next due date'),
+                  subtitle: Text(due == null ? 'Optional' : DateFormat('dd MMM yyyy').format(due!)),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+                      initialDate: due ?? DateTime.now(),
+                    );
+                    if (picked != null) setLocal(() => due = picked);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final outstandingValue = double.tryParse(outstanding.text.trim().replaceAll(',', ''));
+                final rateValue = double.tryParse(rate.text.trim()) ?? 0;
+                final emiValue = double.tryParse(emi.text.trim().replaceAll(',', '')) ?? 0;
+                if (name.text.trim().isEmpty || outstandingValue == null || outstandingValue < 0) return;
+                await _liabilities.updateLiability(
+                  liabilityId: item['id'].toString(),
+                  name: name.text,
+                  liabilityType: type,
+                  lender: lender.text,
+                  outstandingPrincipal: outstandingValue,
+                  interestRate: rateValue,
+                  emiAmount: emiValue,
+                  nextDueOn: due,
+                );
+                if (context.mounted) Navigator.pop(context, true);
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    name.dispose();
+    lender.dispose();
+    outstanding.dispose();
+    rate.dispose();
+    emi.dispose();
+    if (saved == true) await _refresh();
+  }
+
   Future<void> _recordPayment(Map<String, dynamic> item) async {
     final amount = TextEditingController(
       text: item['emi_amount']?.toString() ?? '',
@@ -502,7 +606,9 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                                 ),
                                 PopupMenuButton<String>(
                                   onSelected: (action) async {
-                                    if (action == 'payment') {
+                                    if (action == 'edit') {
+                                      await _editLiability(item);
+                                    } else if (action == 'payment') {
                                       await _recordPayment(item);
                                     } else if (action == 'delete') {
                                       await _liabilities.deleteLiability(
@@ -512,6 +618,10 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                                     }
                                   },
                                   itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Edit'),
+                                    ),
                                     PopupMenuItem(
                                       value: 'payment',
                                       child: Text('Record payment'),
