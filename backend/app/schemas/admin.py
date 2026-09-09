@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
@@ -81,3 +82,78 @@ class AdminActionLogRow(BaseModel):
     ip_address: str | None
     user_agent: str | None
     created_at: datetime
+
+
+class AdminBillingPlanCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9_-]+$")
+    name: str = Field(min_length=2, max_length=120)
+    access_level: str = Field(default="pro", pattern=r"^(free|pro)$")
+    billing_period: str = Field(default="monthly", pattern=r"^(monthly|quarterly|yearly|lifetime|custom)$")
+    price: Decimal = Field(ge=0)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    description: str | None = Field(default=None, max_length=1000)
+    features: dict | None = None
+    is_active: bool = True
+
+
+class AdminBillingPlanRow(AdminBillingPlanCreate):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminPaymentCreate(BaseModel):
+    user_id: str
+    billing_plan_id: str | None = None
+    amount: Decimal = Field(gt=0)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    payment_method: str = Field(min_length=2, max_length=40)
+    provider: str | None = Field(default=None, max_length=40)
+    reference: str | None = Field(default=None, max_length=160)
+    status: str = Field(default="received", pattern=r"^(received|pending|refunded|failed)$")
+    notes: str | None = Field(default=None, max_length=1000)
+    received_at: datetime
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class AdminPaymentRow(BaseModel):
+    id: str
+    user_id: str
+    user_email: str
+    billing_plan_id: str | None
+    billing_plan_name: str | None
+    amount: Decimal
+    currency: str
+    payment_method: str
+    provider: str | None
+    reference: str | None
+    status: str
+    notes: str | None
+    received_at: datetime
+    recorded_by_admin_email: str | None
+    created_at: datetime
+
+
+class AdminUserLocationUpdate(BaseModel):
+    country: str | None = Field(default=None, max_length=80)
+    state: str | None = Field(default=None, max_length=100)
+    city: str | None = Field(default=None, max_length=100)
+    postal_code: str | None = Field(default=None, max_length=20)
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class AdminUserDetail(BaseModel):
+    user: AdminUserRow
+    country: str | None
+    state: str | None
+    city: str | None
+    postal_code: str | None
+    last_ip_address: str | None
+    last_user_agent: str | None
+    location_updated_at: datetime | None
+    payments: list[AdminPaymentRow]
+
+
+class AdminDeleteUserRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+    confirmation: str = Field(pattern=r"^DELETE$")
