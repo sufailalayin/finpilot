@@ -25,6 +25,32 @@ class PlanningService {
     return response.data as List<dynamic>;
   }
 
+  Future<void> updateGoal({
+    required String goalId,
+    required String name,
+    required String goalType,
+    required double targetAmount,
+    required double currentAmount,
+    DateTime? targetDate,
+  }) async {
+    await _api.dio.patch(
+      '/planning/goals/$goalId',
+      data: {
+        'name': name.trim(),
+        'goal_type': goalType,
+        'target_amount': targetAmount,
+        'current_amount': currentAmount,
+        'target_date': targetDate?.toIso8601String().split('T').first,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> deleteGoal(String goalId) async {
+    await _api.dio.delete('/planning/goals/$goalId');
+    _api.notifyDataChanged();
+  }
+
   Future<void> createGoal({
     required String name,
     required double targetAmount,
@@ -42,6 +68,36 @@ class PlanningService {
         'target_date': targetDate?.toIso8601String().split('T').first,
       },
     );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> updateBudget({
+    required String budgetId,
+    required String name,
+    required double amount,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    String? categoryId,
+    bool rolloverEnabled = false,
+    double alertThresholdPct = 80,
+  }) async {
+    await _api.dio.patch(
+      '/planning/budgets/$budgetId',
+      data: {
+        'name': name.trim(),
+        'amount': amount,
+        'period_start': periodStart.toIso8601String().split('T').first,
+        'period_end': periodEnd.toIso8601String().split('T').first,
+        'category_id': categoryId,
+        'rollover_enabled': rolloverEnabled,
+        'alert_threshold_pct': alertThresholdPct,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> deleteBudget(String budgetId) async {
+    await _api.dio.delete('/planning/budgets/$budgetId');
     _api.notifyDataChanged();
   }
 
