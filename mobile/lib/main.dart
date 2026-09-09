@@ -18,11 +18,44 @@ class FinPilotApp extends StatefulWidget {
   State<FinPilotApp> createState() => _FinPilotAppState();
 }
 
-class _FinPilotAppState extends State<FinPilotApp> {
+class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
   late final ApiClient _api = ApiClient();
   late final Future<bool> _session = AuthService(_api).hasSession();
   late final AppSecurityService _security = AppSecurityService();
   bool _unlocked = false;
+  bool _lockEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshLockState();
+  }
+
+  Future<void> _refreshLockState() async {
+    final enabled = await _security.isLockEnabled();
+    if (!mounted) return;
+    setState(() => _lockEnabled = enabled);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_lockEnabled && _unlocked) {
+        setState(() => _unlocked = false);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      _refreshLockState();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,23 +89,12 @@ class _FinPilotAppState extends State<FinPilotApp> {
           }
 
           if (snapshot.data == true) {
-            return FutureBuilder<bool>(
-              future: _security.isLockEnabled(),
-              builder: (context, lockSnapshot) {
-                if (lockSnapshot.connectionState != ConnectionState.done) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final lockEnabled = lockSnapshot.data == true;
-                if (lockEnabled && !_unlocked) {
-                  return AppLockScreen(
-                    onUnlocked: () => setState(() => _unlocked = true),
-                  );
-                }
-                return AppShell(api: _api);
-              },
-            );
+            if (_lockEnabled && !_unlocked) {
+              return AppLockScreen(
+                onUnlocked: () => setState(() => _unlocked = true),
+              );
+            }
+            return AppShell(api: _api);
           }
 
           return AuthScreen(api: _api);
