@@ -24,9 +24,18 @@ async def test_revoke_sessions_invalidates_old_token_and_returns_working_replace
                 "full_name": "Session Test",
             },
         )
-        assert register.status_code == 201, register.text
+        assert register.status_code == 202, register.text
 
-        old_token = register.json()["access_token"]
+        verify = await client.post(
+            "/api/v1/auth/register/verify",
+            json={
+                "email": email,
+                "code": "123456",
+            },
+        )
+        assert verify.status_code == 200, verify.text
+
+        old_token = verify.json()["access_token"]
         old_headers = {"Authorization": f"Bearer {old_token}"}
 
         before = await client.get("/api/v1/auth/me", headers=old_headers)
