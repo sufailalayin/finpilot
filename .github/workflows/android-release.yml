@@ -143,6 +143,17 @@ jobs:
           cp /tmp/finpilot_release/android/app/src/main/res/drawable/launch_background.xml /tmp/finpilot_release/android/app/src/main/res/drawable-v21/launch_background.xml
           sed -i 's/android:label="finpilot"/android:label="FinPilot"/' /tmp/finpilot_release/android/app/src/main/AndroidManifest.xml
           sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@drawable/finpilot_mark"#' /tmp/finpilot_release/android/app/src/main/AndroidManifest.xml
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/finpilot_release/android/app/src/main/AndroidManifest.xml")
+          text = p.read_text()
+          text = text.replace(
+              "<application",
+              '<application android:allowBackup="false" android:usesCleartextTraffic="false"',
+              1,
+          )
+          p.write_text(text)
+          PY
 
       - name: Restore Android signing key
         env:
