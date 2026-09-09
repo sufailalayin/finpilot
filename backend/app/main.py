@@ -15,6 +15,7 @@ from app.routers.finance import router as finance_router
 from app.routers.health import router as health_router
 from app.routers.liabilities import router as liabilities_router
 from app.routers.planning import router as planning_router
+from app.routers.receivables import router as receivables_router
 from app.routers.subscriptions import router as subscriptions_router
 from app.routers.security_privacy import router as security_privacy_router
 
@@ -42,6 +43,7 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(finance_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(planning_router, prefix="/api/v1")
+app.include_router(receivables_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(app_release_router, prefix="/api/v1")
