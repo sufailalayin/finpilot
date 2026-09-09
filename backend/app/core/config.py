@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
+    jwt_issuer: str = "finpilot-api"
+    jwt_audience: str = "finpilot-mobile"
+    login_max_attempts: int = 5
+    login_lock_minutes: int = 5
     trial_days: int = 7
 
     otp_expiry_minutes: int = 10
