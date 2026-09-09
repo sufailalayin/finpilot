@@ -8,6 +8,7 @@ import '../auth/auth_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../planning/planning_screen.dart';
 import '../profile/profile_screen.dart';
+import '../subscription/paywall_screen.dart';
 import '../subscription/pro_feature_gate.dart';
 import '../subscription/subscription_service.dart';
 import '../transactions/transactions_screen.dart';
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Timer? _entitlementTimer;
   String? _entitlementFingerprint;
   bool _syncingEntitlement = false;
+  String? _entitlementStatus;
 
   @override
   void initState() {
@@ -56,6 +58,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         status['paid_until'],
         status['provider'],
       ].join('|');
+
+      final nextStatus = status['status']?.toString();
+      if (!mounted) return;
+      setState(() {
+        _entitlementStatus = nextStatus;
+      });
 
       if (_entitlementFingerprint == null) {
         _entitlementFingerprint = fingerprint;
@@ -103,6 +111,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (_entitlementStatus == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_entitlementStatus == 'expired' ||
+        _entitlementStatus == 'cancelled') {
+      return PaywallScreen(
+        api: widget.api,
+        onActivated: _syncEntitlement,
+      );
+    }
+
     final pages = [
       DashboardScreen(
         key: ValueKey('dashboard-$_revision'),
