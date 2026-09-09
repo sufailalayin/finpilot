@@ -1,24 +1,51 @@
 name: FinPilot Signed Android Release
 
+permissions:
+  contents: read
+
 on:
+  push:
+    branches: ["main"]
   workflow_dispatch:
     inputs:
       version_name:
         description: "Version name, e.g. 1.0.0"
         required: true
-        default: "1.0.0"
+        default: "1.1.0"
       version_code:
         description: "Version code, integer"
         required: true
-        default: "1"
+        default: "2"
 
 jobs:
   signed-android-release:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
     environment: production
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            NAME="$INPUT_VERSION_NAME"
+            CODE="$INPUT_VERSION_CODE"
+          else
+            VERSION="$(awk '/^version:/ {print $2}' mobile/pubspec.yaml)"
+            NAME="${VERSION%%+*}"
+            CODE="${VERSION##*+}"
+          fi
+          test -n "$NAME"
+          test -n "$CODE"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
       - uses: subosito/flutter-action@v2
         with:
@@ -57,7 +84,7 @@ jobs:
           text = path.read_text()
           text = re.sub(
               r"^version:\s*.*$",
-              "version: ${{ inputs.version_name }}+${{ inputs.version_code }}",
+              "version: ${{ steps.version.outputs.name }}+${{ steps.version.outputs.code }}",
               text,
               flags=re.MULTILINE,
           )
@@ -86,7 +113,7 @@ jobs:
               android:viewportWidth="108"
               android:viewportHeight="108">
               <path
-                  android:fillColor="#185A4A"
+                  android:fillColor="#124D40"
                   android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8Z"/>
               <path
                   android:fillColor="#FFFFFF"
@@ -102,7 +129,7 @@ jobs:
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item>
                   <shape android:shape="rectangle">
-                      <solid android:color="#F7F9F8" />
+                      <solid android:color="#F3F6F5" />
                   </shape>
               </item>
               <item
@@ -213,7 +240,7 @@ jobs:
       - name: Upload signed Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: finpilot-signed-android-${{ inputs.version_name }}-${{ inputs.version_code }}
+          name: finpilot-signed-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
           retention-days: 14
           path: |
             /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk
