@@ -12,6 +12,8 @@ class ReceivableCreate(BaseModel):
     given_on: date
     due_on: date | None = None
     note: str | None = Field(default=None, max_length=500)
+    source_type: str = Field(default="outside", pattern=r"^(account|outside)$")
+    source_account_id: uuid.UUID | None = None
 
 
 class ReceivableUpdate(BaseModel):
@@ -41,6 +43,8 @@ class ReceivableRepaymentCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     received_on: date
     note: str | None = Field(default=None, max_length=300)
+    destination_type: str = Field(default="outside", pattern=r"^(account|outside)$")
+    destination_account_id: uuid.UUID | None = None
 
 
 class ReceivableRepaymentResponse(BaseModel):
