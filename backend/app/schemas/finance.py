@@ -107,6 +107,7 @@ class TransferResponse(BaseModel):
 class NetWorthResponse(BaseModel):
     account_assets: Decimal
     investment_assets: Decimal
+    receivables: Decimal = Decimal("0.00")
     total_assets: Decimal
     liabilities: Decimal
     net_worth: Decimal
