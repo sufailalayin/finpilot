@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str | None
     is_admin: bool
+    email_verified: bool
     created_at: datetime
     entitlement: EntitlementResponse | None
 
