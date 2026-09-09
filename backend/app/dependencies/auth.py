@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,12 +8,15 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import decode_access_token_claims
 from app.db.session import get_db
-from app.models.user import User, UserStatus
+from app.models.user import EntitlementStatus, User, UserStatus
+from app.services.subscriptions import normalize_paid_entitlement
+from app.services.trials import normalize_entitlement
 
 bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -38,5 +41,40 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User unavailable")
     if claims["ver"] != user.token_version:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
+
+    entitlement = user.entitlement
+    if entitlement is not None:
+        previous_status = entitlement.status
+        previous_plan = entitlement.plan_code
+        normalize_entitlement(entitlement)
+        normalize_paid_entitlement(entitlement)
+        if (
+            entitlement.status != previous_status
+            or entitlement.plan_code != previous_plan
+        ):
+            await db.commit()
+
+        path = request.url.path
+        access_exempt = (
+            path.startswith("/api/v1/subscriptions/status")
+            or path.startswith("/api/v1/subscriptions/plans")
+            or path.startswith("/api/v1/subscriptions/google-play/verify")
+            or path.startswith("/api/v1/admin")
+            or path.startswith("/api/v1/auth")
+            or path.startswith("/api/v1/app-release")
+        )
+
+        if (
+            not user.is_admin
+            and not access_exempt
+            and entitlement.status in {
+                EntitlementStatus.EXPIRED,
+                EntitlementStatus.CANCELLED,
+            }
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="FinPilot trial or subscription has ended",
+            )
 
     return user
