@@ -1,13 +1,16 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
+from app.core.request_meta import client_ip, user_agent
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.user import SecurityAuditEvent, User, UserLocation
+from app.models.user import SecurityAuditEvent, User, UserLocation, UserStatus
 from app.schemas.auth import (
     ForgotPasswordRequest,
     GenericAuthMessage,
@@ -32,20 +35,6 @@ from app.services.trials import create_trial_entitlement, normalize_entitlement
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
-
-
-def _request_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    if request.client:
-        return request.client.host[:64]
-    return None
-
-
-def _user_agent(request: Request) -> str | None:
-    value = request.headers.get("user-agent")
-    return value[:500] if value else None
 
 
 def _otp_response(email: str, message: str) -> OtpRequestResponse:
@@ -133,8 +122,8 @@ async def register(
             user_id=user.id,
             event_type="signup_otp_sent",
             description="Signup verification code requested.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -166,8 +155,8 @@ async def resend_register_otp(
             user_id=user.id,
             event_type="signup_otp_resent",
             description="Signup verification code resent.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -223,8 +212,8 @@ async def verify_register_otp(
             user_id=user.id,
             event_type="email_verified",
             description="Signup email verified successfully.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -259,13 +248,57 @@ async def login(
     )
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(
-        payload.password,
-        user.password_hash,
+    now = datetime.now(timezone.utc)
+
+    if (
+        user is not None
+        and user.login_locked_until is not None
+        and user.login_locked_until > now
     ):
+        retry_after = max(
+            1,
+            int((user.login_locked_until - now).total_seconds()),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many sign-in attempts. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    password_ok = (
+        user is not None
+        and verify_password(payload.password, user.password_hash)
+    )
+
+    if not password_ok:
+        if user is not None:
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= settings.login_max_attempts:
+                user.login_locked_until = now + timedelta(
+                    minutes=settings.login_lock_minutes,
+                )
+                user.failed_login_attempts = 0
+
+            db.add(
+                SecurityAuditEvent(
+                    user_id=user.id,
+                    event_type="login_failed",
+                    description="Failed sign-in attempt.",
+                    ip_address=client_ip(request),
+                    user_agent=user_agent(request),
+                )
+            )
+            await db.commit()
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
+        )
+
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account unavailable",
         )
 
     if not user.email_verified:
@@ -273,6 +306,9 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email verification required",
         )
+
+    user.failed_login_attempts = 0
+    user.login_locked_until = None
 
     if user.entitlement is not None:
         previous_status = user.entitlement.status
@@ -284,16 +320,16 @@ async def login(
     if location is None:
         location = UserLocation(user_id=user.id)
         db.add(location)
-    location.last_ip_address = _request_ip(request)
-    location.last_user_agent = _user_agent(request)
+    location.last_ip_address = client_ip(request)
+    location.last_user_agent = user_agent(request)
 
     db.add(
         SecurityAuditEvent(
             user_id=user.id,
             event_type="login_success",
             description="Successful sign in.",
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
@@ -333,8 +369,8 @@ async def forgot_password(
                     user_id=user.id,
                     event_type="password_reset_otp_sent",
                     description="Password reset verification code requested.",
-                    ip_address=_request_ip(request),
-                    user_agent=_user_agent(request),
+                    ip_address=client_ip(request),
+                    user_agent=user_agent(request),
                 )
             )
             await db.commit()
@@ -390,8 +426,8 @@ async def reset_password(
             description=(
                 "Password reset completed and previous sessions revoked."
             ),
-            ip_address=_request_ip(request),
-            user_agent=_user_agent(request),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
         )
     )
     await db.commit()
