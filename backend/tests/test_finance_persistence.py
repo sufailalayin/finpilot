@@ -24,8 +24,17 @@ async def test_finance_values_persist_recalculate_and_reload():
                 "full_name": "Persistence Test",
             },
         )
-        assert register.status_code == 201, register.text
-        token = register.json()["access_token"]
+        assert register.status_code == 202, register.text
+
+        verify = await client.post(
+            "/api/v1/auth/register/verify",
+            json={
+                "email": email,
+                "code": "123456",
+            },
+        )
+        assert verify.status_code == 200, verify.text
+        token = verify.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
         account = await client.post(
