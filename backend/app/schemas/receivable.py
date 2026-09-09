@@ -64,3 +64,30 @@ class ReceivableOverview(BaseModel):
     cleared_count: int
     pending: list[ReceivableResponse]
     cleared: list[ReceivableResponse]
+
+
+
+class ReceivableMovementCreate(BaseModel):
+    source_type: str = Field(pattern=r"^(account|person|outside)$")
+    destination_type: str = Field(pattern=r"^(account|person|outside)$")
+    source_account_id: uuid.UUID | None = None
+    destination_account_id: uuid.UUID | None = None
+    source_receivable_id: uuid.UUID | None = None
+    destination_receivable_id: uuid.UUID | None = None
+    amount: Decimal = Field(gt=0)
+    occurred_on: date
+    note: str | None = Field(default=None, max_length=300)
+
+
+class ReceivableMovementResponse(BaseModel):
+    id: uuid.UUID
+    source_type: str
+    destination_type: str
+    source_account_id: uuid.UUID | None
+    destination_account_id: uuid.UUID | None
+    source_receivable_id: uuid.UUID | None
+    destination_receivable_id: uuid.UUID | None
+    amount: Decimal
+    occurred_on: date
+    note: str | None
+    created_at: datetime
