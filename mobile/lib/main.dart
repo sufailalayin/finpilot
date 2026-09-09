@@ -6,6 +6,7 @@ import 'features/auth/auth_service.dart';
 import 'features/navigation/app_shell.dart';
 import 'features/security/app_lock_screen.dart';
 import 'features/security/app_security_service.dart';
+import 'features/update/app_update_gate.dart';
 
 void main() {
   runApp(const FinPilotApp());
@@ -103,10 +104,16 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
                 onUnlocked: () => setState(() => _unlocked = true),
               );
             }
-            return AppShell(api: _api);
+            return AppUpdateGate(
+              api: _api,
+              child: AppShell(api: _api),
+            );
           }
 
-          return AuthScreen(api: _api);
+          return AppUpdateGate(
+            api: _api,
+            child: AuthScreen(api: _api),
+          );
         },
       ),
     );
