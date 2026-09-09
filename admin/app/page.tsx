@@ -9,6 +9,7 @@ import {
   fetchAdminSecurityEvents,
   fetchAdminSubscriptions,
   fetchAdminUsers,
+  fetchSystemReadiness,
   revokeAdminUserSessions,
   sendAdminTestEmail,
   updateAdminUser,
@@ -49,6 +50,12 @@ type SubscriptionSummary = {
   active_paid_users: number;
   cancelled_users: number;
   expired_users: number;
+};
+
+type Readiness = {
+  status: string;
+  email_delivery: string;
+  email_mode: string;
 };
 
 type AIUsage = {
@@ -122,6 +129,7 @@ export default function AdminDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionSummary | null>(null);
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [ai, setAI] = useState<AIUsage | null>(null);
   const [security, setSecurity] = useState<SecurityEvent[]>([]);
   const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
@@ -134,13 +142,14 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [overviewData, userData, subscriptionData, aiData, securityData, actionLogData] = await Promise.all([
+      const [overviewData, userData, subscriptionData, aiData, securityData, actionLogData, readinessData] = await Promise.all([
         fetchAdminOverview(),
         fetchAdminUsers(),
         fetchAdminSubscriptions(),
         fetchAdminAIUsage(),
         fetchAdminSecurityEvents(),
         fetchAdminActionLogs(),
+        fetchSystemReadiness(),
       ]);
       setOverview(overviewData);
       setUsers(userData);
@@ -148,6 +157,7 @@ export default function AdminDashboard() {
       setAI(aiData);
       setSecurity(securityData);
       setActionLogs(actionLogData);
+      setReadiness(readinessData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load admin data";
       if (message === "ADMIN_SESSION_EXPIRED") {
@@ -295,8 +305,14 @@ export default function AdminDashboard() {
                 </div>
                 <div className="kpi-value">{overview?.security_events_24h ?? "—"}</div>
                 <div className="kpi-note">events in the last 24 hours</div>
-                <div style={{ marginTop: 18 }}>
+                <div style={{ marginTop: 18, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <span className="badge good">HttpOnly admin session enabled</span>
+                  <span className={readiness?.email_delivery === "ready" ? "badge good" : "badge warn"}>
+                    Email delivery: {readiness?.email_delivery === "ready" ? "Ready" : "Not configured"}
+                  </span>
+                  <span className="badge">
+                    Provider: {readiness?.email_mode ?? "—"}
+                  </span>
                 </div>
               </article>
             </div>
