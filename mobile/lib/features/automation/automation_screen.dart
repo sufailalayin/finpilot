@@ -216,7 +216,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   cardLast4:
                       billType == 'credit_card' ? cardLast4.text : null,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save'),
             ),
@@ -225,10 +227,12 @@ class _AutomationScreenState extends State<AutomationScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
-    provider.dispose();
-    cardLast4.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+      provider.dispose();
+      cardLast4.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
@@ -386,7 +390,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   cardLast4:
                       billType == 'credit_card' ? cardLast4.text : null,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save changes'),
             ),
@@ -395,10 +401,12 @@ class _AutomationScreenState extends State<AutomationScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
-    provider.dispose();
-    cardLast4.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+      provider.dispose();
+      cardLast4.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
@@ -495,7 +503,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   nextDueOn: nextDue,
                   isActive: rule['is_active'] != false,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save changes'),
             ),
@@ -504,8 +514,10 @@ class _AutomationScreenState extends State<AutomationScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
@@ -627,7 +639,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
                   frequency: frequency,
                   nextDueOn: nextDue,
                 );
-                if (context.mounted) Navigator.pop(context, true);
+                if (!context.mounted) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                Navigator.of(context).pop(true);
               },
               child: const Text('Save'),
             ),
@@ -636,8 +650,10 @@ class _AutomationScreenState extends State<AutomationScreen> {
       ),
     );
 
-    name.dispose();
-    amount.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      amount.dispose();
+    });
     if (saved == true) await _refresh();
   }
 
