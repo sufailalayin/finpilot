@@ -311,6 +311,16 @@ async def update_user(
                 entitlement.plan_code = PlanCode(payload.plan_code)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid plan code") from exc
+
+            # A manual plan change should take effect immediately even when
+            # the admin does not separately change entitlement_status.
+            if payload.entitlement_status is None:
+                entitlement.status = (
+                    EntitlementStatus.ACTIVE
+                    if entitlement.plan_code == PlanCode.PRO
+                    else EntitlementStatus.EXPIRED
+                )
+
         if payload.entitlement_status is not None:
             try:
                 entitlement.status = EntitlementStatus(payload.entitlement_status)
