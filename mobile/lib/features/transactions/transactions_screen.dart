@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/app_error_state.dart';
 import '../finance/add_transaction_screen.dart';
 import '../finance/finance_service.dart';
 import 'edit_transaction_screen.dart';
@@ -73,12 +74,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
+            return AppErrorState(
+              error: snapshot.error,
+              onRetry: _refresh,
+              title: 'Transactions unavailable',
             );
           }
 
