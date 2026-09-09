@@ -432,7 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           Text(
-                            'Cash ' + _money.format(data.totalBalance),
+                            'Accounts ' + _money.format(data.totalBalance),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onPrimary,
                               fontWeight: FontWeight.w600,
