@@ -42,6 +42,9 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
     final phone = TextEditingController();
     final amount = TextEditingController();
     final note = TextEditingController();
+    final accounts = await _service.accounts();
+    String sourceType = 'outside';
+    String? sourceAccountId;
     DateTime givenOn = DateTime.now();
     DateTime? dueOn;
 
@@ -80,6 +83,57 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                     prefixText: '₹ ',
                   ),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: sourceType,
+                  decoration: const InputDecoration(labelText: 'Money from'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'outside',
+                      child: Text('Outside FinPilot'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'account',
+                      child: Text('My cash / bank account'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setLocal(() {
+                      sourceType = value;
+                      if (value != 'account') sourceAccountId = null;
+                    });
+                  },
+                ),
+                if (sourceType == 'account') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: sourceAccountId,
+                    decoration: const InputDecoration(
+                      labelText: 'Select cash / bank account',
+                    ),
+                    items: accounts
+                        .where((row) => row['account_type']?.toString() != 'card')
+                        .map(
+                          (row) => DropdownMenuItem<String>(
+                            value: row['id'].toString(),
+                            child: Text(
+                              row['name'].toString() +
+                                  ' • ' +
+                                  _money.format(
+                                    double.tryParse(
+                                          row['current_balance'].toString(),
+                                        ) ??
+                                        0,
+                                  ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setLocal(() => sourceAccountId = value),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -141,7 +195,8 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                 );
                 if (person.text.trim().isEmpty ||
                     value == null ||
-                    value <= 0) {
+                    value <= 0 ||
+                    (sourceType == 'account' && sourceAccountId == null)) {
                   return;
                 }
 
@@ -152,6 +207,8 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                   givenOn: givenOn,
                   dueOn: dueOn,
                   note: note.text,
+                  sourceType: sourceType,
+                  sourceAccountId: sourceAccountId,
                 );
 
                 if (!context.mounted) return;
@@ -180,6 +237,9 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
       text: item['remaining_amount']?.toString() ?? '',
     );
     final note = TextEditingController();
+    final accounts = await _service.accounts();
+    String destinationType = 'outside';
+    String? destinationAccountId;
     DateTime receivedOn = DateTime.now();
 
     final saved = await showDialog<bool>(
@@ -211,6 +271,48 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                   prefixText: '₹ ',
                 ),
               ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: destinationType,
+                decoration: const InputDecoration(labelText: 'Received into'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'outside',
+                    child: Text('Outside FinPilot'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'account',
+                    child: Text('My cash / bank account'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setLocal(() {
+                    destinationType = value;
+                    if (value != 'account') destinationAccountId = null;
+                  });
+                },
+              ),
+              if (destinationType == 'account') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: destinationAccountId,
+                  decoration: const InputDecoration(
+                    labelText: 'Select cash / bank account',
+                  ),
+                  items: accounts
+                      .where((row) => row['account_type']?.toString() != 'card')
+                      .map(
+                        (row) => DropdownMenuItem<String>(
+                          value: row['id'].toString(),
+                          child: Text(row['name'].toString()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setLocal(() => destinationAccountId = value),
+                ),
+              ],
               const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -251,7 +353,11 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                       item['remaining_amount'].toString(),
                     ) ??
                     0;
-                if (value == null || value <= 0 || value > remaining) {
+                if (value == null ||
+                    value <= 0 ||
+                    value > remaining ||
+                    (destinationType == 'account' &&
+                        destinationAccountId == null)) {
                   return;
                 }
 
@@ -260,6 +366,8 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
                   amount: value,
                   receivedOn: receivedOn,
                   note: note.text,
+                  destinationType: destinationType,
+                  destinationAccountId: destinationAccountId,
                 );
 
                 if (!context.mounted) return;
