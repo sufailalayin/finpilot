@@ -2,13 +2,14 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.entitlements import require_pro_user
-from app.models.finance import FinanceAccount
+from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.receivable import Receivable, ReceivableMovement, ReceivableRepayment
+from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
 from app.schemas.receivable import (
     ReceivableCreate,
@@ -23,6 +24,67 @@ from app.schemas.receivable import (
 )
 
 router = APIRouter(prefix="/receivables", tags=["receivables"])
+
+
+async def _available_account_balance(
+    db: AsyncSession,
+    user_id,
+    account: FinanceAccount,
+) -> Decimal:
+    tx_movement = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                        (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            )
+        ).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account.id,
+        )
+    )
+    receivable_movement = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                        (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            )
+        ).where(ReceivableMovement.user_id == user_id)
+    )
+    liability_inflow = await db.scalar(
+        select(
+            func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+        ).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account.id,
+        )
+    )
+    liability_outflow = await db.scalar(
+        select(
+            func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+        ).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account.id,
+        )
+    )
+    return (
+        account.opening_balance
+        + (tx_movement or Decimal("0.00"))
+        + (receivable_movement or Decimal("0.00"))
+        + (liability_inflow or Decimal("0.00"))
+        - (liability_outflow or Decimal("0.00"))
+    )
 
 
 def _serialize(item: Receivable) -> ReceivableResponse:
@@ -84,6 +146,14 @@ async def create_movement(
         )
         if source_account is None:
             raise HTTPException(status_code=404, detail="Source account not found")
+        if source_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(status_code=400, detail="Source must be Cash or Bank")
+        available = await _available_account_balance(db, user.id, source_account)
+        if payload.amount > available:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected account does not have enough balance",
+            )
 
     if payload.destination_account_id is not None:
         destination_account = await db.scalar(
@@ -94,6 +164,8 @@ async def create_movement(
         )
         if destination_account is None:
             raise HTTPException(status_code=404, detail="Destination account not found")
+        if destination_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(status_code=400, detail="Destination must be Cash or Bank")
 
     if payload.source_receivable_id is not None:
         source_person = await db.scalar(
@@ -178,6 +250,14 @@ async def create_receivable(
         )
         if source_account is None:
             raise HTTPException(status_code=404, detail="Source account not found")
+        if source_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(status_code=400, detail="Money can only be given from Cash or Bank")
+        available = await _available_account_balance(db, user.id, source_account)
+        if payload.original_amount > available:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected account does not have enough balance",
+            )
 
     item = Receivable(
         user_id=user.id,
