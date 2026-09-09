@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_BASE_URL =
   process.env.FINPILOT_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_FINPILOT_API_BASE_URL ??
-  "https://finpilot-backend-production-1cb7.up.railway.app/api/v1";
+  "http://127.0.0.1:8000/api/v1";
 
 export async function POST(request: NextRequest) {
   const pending = request.cookies.get("finpilot_admin_mfa_pending")?.value;
