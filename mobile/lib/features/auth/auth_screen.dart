@@ -26,6 +26,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _registerMode = false;
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _legalAccepted = false;
   String? _error;
 
   bool get _formLooksValid {
@@ -34,7 +35,8 @@ class _AuthScreenState extends State<AuthScreen> {
     final emailOk = email.contains('@') && email.contains('.');
     final passwordOk = password.length >= 8;
     final nameOk = !_registerMode || _name.text.trim().isNotEmpty;
-    return emailOk && passwordOk && nameOk;
+    final legalOk = !_registerMode || _legalAccepted;
+    return emailOk && passwordOk && nameOk && legalOk;
   }
 
   void _switchMode() {
@@ -48,7 +50,7 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!_formLooksValid || _loading) {
       setState(() {
         _error = _registerMode
-            ? 'Enter your name, a valid email, and a password with at least 8 characters.'
+            ? 'Enter your name and valid email, use a password with at least 8 characters, and accept the Terms and Privacy Policy.'
             : 'Enter a valid email and password.';
       });
       return;
@@ -300,6 +302,29 @@ class _AuthScreenState extends State<AuthScreen> {
                                   ),
                                 ),
                               ),
+                              if (_registerMode) ...[
+                                const SizedBox(height: 14),
+                                CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  value: _legalAccepted,
+                                  onChanged: _loading
+                                      ? null
+                                      : (value) => setState(
+                                            () => _legalAccepted =
+                                                value ?? false,
+                                          ),
+                                  title: const Text(
+                                    'I agree to the Terms of Service and acknowledge the Privacy Policy.',
+                                    style: TextStyle(fontSize: 13.5),
+                                  ),
+                                  subtitle: const Text(
+                                    'FinPilot may process the information needed to provide the financial features you choose. Important records should also be kept independently.',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
                               if (_error != null) ...[
                                 const SizedBox(height: 14),
                                 Container(
