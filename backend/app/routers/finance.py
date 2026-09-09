@@ -44,7 +44,17 @@ DEFAULT_CATEGORIES = {
 
 @router.post("/accounts", response_model=AccountResponse, status_code=status.HTTP_201_CREATED)
 async def create_account(payload: AccountCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> AccountResponse:
-    account = FinanceAccount(user_id=user.id, name=payload.name.strip(), account_type=payload.account_type, currency=payload.currency.upper(), opening_balance=payload.opening_balance)
+    account = FinanceAccount(
+        user_id=user.id,
+        name=payload.name.strip(),
+        account_type=payload.account_type,
+        currency=payload.currency.upper(),
+        opening_balance=payload.opening_balance,
+        credit_limit=payload.credit_limit,
+        card_last4=payload.card_last4,
+        statement_day=payload.statement_day,
+        payment_due_day=payload.payment_due_day,
+    )
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -191,13 +201,39 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
                 )
             ).where(Transaction.account_id == account.id, Transaction.user_id == user.id)
         )
+        if account.account_type.value == "card":
+            outstanding = account.opening_balance - movement
+            if outstanding < 0:
+                outstanding = Decimal("0.00")
+            available_credit = (
+                max(account.credit_limit - outstanding, Decimal("0.00"))
+                if account.credit_limit is not None
+                else None
+            )
+            utilization_pct = (
+                float(outstanding / account.credit_limit * 100)
+                if account.credit_limit is not None and account.credit_limit > 0
+                else None
+            )
+            current_balance = outstanding
+        else:
+            current_balance = account.opening_balance + movement
+            available_credit = None
+            utilization_pct = None
+
         result.append(AccountBalanceResponse(
             id=account.id,
             name=account.name,
             account_type=account.account_type,
             currency=account.currency,
             opening_balance=account.opening_balance,
-            current_balance=account.opening_balance + movement,
+            current_balance=current_balance,
+            credit_limit=account.credit_limit,
+            card_last4=account.card_last4,
+            statement_day=account.statement_day,
+            payment_due_day=account.payment_due_day,
+            available_credit=available_credit,
+            utilization_pct=round(utilization_pct, 1) if utilization_pct is not None else None,
             created_at=account.created_at,
         ))
     return result
@@ -338,6 +374,7 @@ async def net_worth_summary(
         ).scalars().all()
     )
     account_assets = Decimal("0.00")
+    card_liabilities = Decimal("0.00")
     for account in accounts:
         movement = await db.scalar(
             select(
@@ -356,7 +393,13 @@ async def net_worth_summary(
                 Transaction.account_id == account.id,
             )
         )
-        account_assets += account.opening_balance + (movement or Decimal("0.00"))
+        movement = movement or Decimal("0.00")
+        if account.account_type.value == "card":
+            card_outstanding = account.opening_balance - movement
+            if card_outstanding > 0:
+                card_liabilities += card_outstanding
+        else:
+            account_assets += account.opening_balance + movement
 
     investment_assets = await db.scalar(
         select(
@@ -376,7 +419,7 @@ async def net_worth_summary(
             )
         ).where(Liability.user_id == user.id)
     )
-    liabilities = liabilities or Decimal("0.00")
+    liabilities = (liabilities or Decimal("0.00")) + card_liabilities
 
     return NetWorthResponse(
         account_assets=account_assets,
