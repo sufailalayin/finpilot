@@ -10,7 +10,7 @@ from app.models.automation import BillReminder
 from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
-from app.services.analytics import build_analytics
+from app.services.analytics import build_analytics, build_report
 
 
 async def build_dashboard(db: AsyncSession, user_id) -> dict:
@@ -122,6 +122,22 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
     month_expense = month.expense
 
     analytics = await build_analytics(db, user_id)
+    cashflow_report = await build_report(db, user_id, months=4)
+    cashflow_trend = cashflow_report["trend"]
+
+    current_net = cashflow_trend[-1]["net"] if cashflow_trend else Decimal("0.00")
+    previous_net = (
+        cashflow_trend[-2]["net"]
+        if len(cashflow_trend) >= 2
+        else Decimal("0.00")
+    )
+
+    if current_net > previous_net:
+        cashflow_direction = "improving"
+    elif current_net < previous_net:
+        cashflow_direction = "declining"
+    else:
+        cashflow_direction = "stable"
 
     investment_assets = await db.scalar(
         select(func.coalesce(func.sum(Asset.current_value), Decimal("0.00"))).where(
@@ -325,4 +341,6 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             "monthly_expense": month_expense,
             "goal": emergency_goal,
         },
+        "cashflow_trend": cashflow_trend,
+        "cashflow_direction": cashflow_direction,
     }
