@@ -8,6 +8,10 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
 COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh \
+    && addgroup --system finpilot \
+    && adduser --system --ingroup finpilot finpilot \
+    && chown -R finpilot:finpilot /app
+USER finpilot
 EXPOSE 8000
 CMD ["sh", "entrypoint.sh"]
