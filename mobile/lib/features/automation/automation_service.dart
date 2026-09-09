@@ -7,6 +7,7 @@ class AutomationService {
 
   Future<Map<String, dynamic>> alerts() async {
     final response = await _api.dio.get('/automation/alerts');
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -38,10 +39,12 @@ class AutomationService {
         'auto_renew': autoRenew,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> markBillPaid(String billId) async {
     await _api.dio.post('/automation/bills/$billId/paid');
+    _api.notifyDataChanged();
   }
 
   Future<void> addRecurring({
@@ -66,5 +69,6 @@ class AutomationService {
         'next_due_on': nextDueOn.toIso8601String().split('T').first,
       },
     );
+    _api.notifyDataChanged();
   }
 }
