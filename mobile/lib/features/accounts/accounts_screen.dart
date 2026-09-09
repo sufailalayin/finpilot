@@ -45,7 +45,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => AddAccountScreen(api: widget.api)),
     );
-    if (saved == true) await _refresh();
+    if (saved == true) {
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account saved successfully.')),
+      );
+    }
   }
 
   Future<void> _transfer() async {
