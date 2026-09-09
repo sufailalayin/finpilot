@@ -20,8 +20,10 @@ from app.schemas.automation import (
     SmartAlert,
     BillCreate,
     BillResponse,
+    BillUpdate,
     RecurringRuleCreate,
     RecurringRuleResponse,
+    RecurringRuleUpdate,
 )
 
 router = APIRouter(prefix="/automation", tags=["automation"])
@@ -54,6 +56,68 @@ async def create_recurring(
     return RecurringRuleResponse.model_validate(rule)
 
 
+@router.patch("/recurring/{rule_id}", response_model=RecurringRuleResponse)
+async def update_recurring(
+    rule_id: uuid.UUID,
+    payload: RecurringRuleUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RecurringRuleResponse:
+    rule = await db.scalar(
+        select(RecurringRule).where(
+            RecurringRule.id == rule_id,
+            RecurringRule.user_id == user.id,
+        )
+    )
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Recurring rule not found")
+
+    values = payload.model_dump(exclude_unset=True)
+    if "account_id" in values and values["account_id"] is not None:
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == values["account_id"],
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    tx_type = values.get("transaction_type", rule.transaction_type)
+    if tx_type not in {"income", "expense"}:
+        raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
+    frequency = values.get("frequency", rule.frequency)
+    if frequency not in {"weekly", "monthly", "yearly"}:
+        raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
+
+    for field, value in values.items():
+        if field == "name" and value is not None:
+            value = value.strip()
+        setattr(rule, field, value)
+
+    await db.commit()
+    await db.refresh(rule)
+    return RecurringRuleResponse.model_validate(rule)
+
+
+@router.delete("/recurring/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_recurring(
+    rule_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    rule = await db.scalar(
+        select(RecurringRule).where(
+            RecurringRule.id == rule_id,
+            RecurringRule.user_id == user.id,
+        )
+    )
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Recurring rule not found")
+    await db.delete(rule)
+    await db.commit()
+
+
 @router.get("/recurring", response_model=list[RecurringRuleResponse])
 async def list_recurring(
     user: User = Depends(get_current_user),
@@ -80,6 +144,55 @@ async def create_bill(
     await db.commit()
     await db.refresh(bill)
     return BillResponse.model_validate(bill)
+
+
+@router.patch("/bills/{bill_id}", response_model=BillResponse)
+async def update_bill(
+    bill_id: uuid.UUID,
+    payload: BillUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BillResponse:
+    bill = await db.scalar(
+        select(BillReminder).where(
+            BillReminder.id == bill_id,
+            BillReminder.user_id == user.id,
+        )
+    )
+    if bill is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    values = payload.model_dump(exclude_unset=True)
+    frequency = values.get("frequency", bill.frequency)
+    if frequency not in {"once", "weekly", "monthly", "yearly"}:
+        raise HTTPException(status_code=400, detail="Unsupported bill frequency")
+
+    for field, value in values.items():
+        if field in {"name", "provider"} and value is not None:
+            value = value.strip()
+        setattr(bill, field, value)
+
+    await db.commit()
+    await db.refresh(bill)
+    return BillResponse.model_validate(bill)
+
+
+@router.delete("/bills/{bill_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_bill(
+    bill_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    bill = await db.scalar(
+        select(BillReminder).where(
+            BillReminder.id == bill_id,
+            BillReminder.user_id == user.id,
+        )
+    )
+    if bill is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    await db.delete(bill)
+    await db.commit()
 
 
 @router.get("/bills", response_model=list[BillResponse])
