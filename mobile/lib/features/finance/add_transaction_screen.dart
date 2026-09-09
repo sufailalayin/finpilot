@@ -92,7 +92,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
 
     try {
-      final saved = await _finance.createTransaction(
+      await _finance.createTransaction(
         accountId: _accountId!,
         categoryId: _categoryId,
         transactionType: _type,
@@ -102,19 +102,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         note: _note.text,
       );
       if (!mounted) return;
-      final savedAmount = saved['amount']?.toString() ?? _amount.text.trim();
+
+      FocusManager.instance.primaryFocus?.unfocus();
       Navigator.of(context).pop(true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            (_type == 'income' ? 'Income saved: ₹' : 'Expense saved: ₹') +
-                savedAmount,
-          ),
-        ),
-      );
     } catch (_) {
-      setState(() => _error = 'Unable to save transaction.');
+      if (mounted) {
+        setState(() => _error = 'Unable to save transaction.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
