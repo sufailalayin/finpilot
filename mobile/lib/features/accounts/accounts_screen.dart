@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../finance/add_account_screen.dart';
 import '../finance/finance_service.dart';
+import '../liabilities/liabilities_screen.dart';
+import '../receivables/receivables_screen.dart';
 import 'transfer_screen.dart';
 
 class AccountsScreen extends StatefulWidget {
@@ -267,22 +269,41 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       ),
                     ),
                 const SizedBox(height: 16),
-                Row(
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  childAspectRatio: 3.2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
                   children: [
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        onPressed: _addAccount,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add account'),
-                      ),
+                    FilledButton.tonalIcon(
+                      onPressed: _addAccount,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add account'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        onPressed: accounts.length >= 2 ? _transfer : null,
-                        icon: const Icon(Icons.swap_horiz),
-                        label: const Text('Transfer'),
+                    FilledButton.tonalIcon(
+                      onPressed: accounts.length >= 2 ? _transfer : null,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text('Transfer'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReceivablesScreen(api: widget.api),
+                        ),
                       ),
+                      icon: const Icon(Icons.call_made),
+                      label: const Text('Give money'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LiabilitiesScreen(api: widget.api),
+                        ),
+                      ),
+                      icon: const Icon(Icons.call_received),
+                      label: const Text('Borrow'),
                     ),
                   ],
                 ),
