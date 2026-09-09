@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/app_error_state.dart';
 import 'automation_service.dart';
 
 class SmartAlertsScreen extends StatefulWidget {
@@ -36,7 +37,12 @@ class _SmartAlertsScreenState extends State<SmartAlertsScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          if (snapshot.hasError || !snapshot.hasData) return Center(child: FilledButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Retry')));
+          if (snapshot.hasError || !snapshot.hasData) {
+            return AppErrorState(
+              error: snapshot.error,
+              onRetry: _refresh,
+            );
+          }
           final data = snapshot.data!;
           final alerts = (data['alerts'] as List<dynamic>?) ?? const [];
           return RefreshIndicator(
