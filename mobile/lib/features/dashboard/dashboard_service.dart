@@ -14,6 +14,7 @@ class DashboardData {
     required this.liabilities,
     required this.savingsRate,
     required this.healthScore,
+    required this.healthScoreAvailable,
     required this.healthGrade,
     required this.activeBudgetCount,
     required this.budgetWarningCount,
@@ -34,6 +35,7 @@ class DashboardData {
   final double liabilities;
   final double savingsRate;
   final int healthScore;
+  final bool healthScoreAvailable;
   final String healthGrade;
   final int activeBudgetCount;
   final int budgetWarningCount;
@@ -68,6 +70,7 @@ class DashboardData {
       liabilities: money(json['liabilities']),
       savingsRate: double.tryParse(json['savings_rate'].toString()) ?? 0,
       healthScore: int.tryParse(json['financial_health_score'].toString()) ?? 0,
+      healthScoreAvailable: json['health_score_available'] == true,
       healthGrade: json['health_grade']?.toString() ?? 'Not rated',
       activeBudgetCount:
           int.tryParse(json['active_budget_count'].toString()) ?? 0,
