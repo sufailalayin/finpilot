@@ -54,8 +54,14 @@ type SubscriptionSummary = {
 
 type Readiness = {
   status: string;
+  database: string;
+  environment: string;
   email_delivery: string;
   email_mode: string;
+  google_play: string;
+  ai: string;
+  cors: string;
+  production_release: string;
 };
 
 type AIUsage = {
@@ -316,6 +322,33 @@ export default function AdminDashboard() {
                 </div>
               </article>
             </div>
+
+            <section className="section">
+              <div className="section-header">
+                <div>
+                  <h2>Release readiness</h2>
+                  <p>Safe production configuration checks. No secret values are displayed.</p>
+                </div>
+                <span className={readiness?.production_release === "ready" ? "badge good" : "badge warn"}>
+                  {readiness?.production_release === "ready" ? "Release ready" : "Release blocked"}
+                </span>
+              </div>
+              <div className="grid kpis">
+                {[
+                  ["Backend & database", readiness?.database ?? "—", readiness?.environment ?? "—"],
+                  ["OTP email", readiness?.email_delivery ?? "—", readiness?.email_mode ?? "—"],
+                  ["Google Play", readiness?.google_play ?? "—", "Subscriptions + server verification"],
+                  ["AI provider", readiness?.ai ?? "—", "FinPilot Pro AI"],
+                  ["Production CORS", readiness?.cors ?? "—", "Approved web origins only"],
+                ].map(([label, value, note]) => (
+                  <article className="card kpi" key={String(label)}>
+                    <div className="kpi-label">{label}</div>
+                    <div className="kpi-value" style={{ fontSize: 22 }}>{String(value).replaceAll("_", " ")}</div>
+                    <div className="kpi-note">{note}</div>
+                  </article>
+                ))}
+              </div>
+            </section>
 
             <section className="section">
               <div className="section-header">
