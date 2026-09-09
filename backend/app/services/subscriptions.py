@@ -39,3 +39,24 @@ def normalize_paid_entitlement(
         entitlement.plan_code = PlanCode.FREE
 
     return entitlement
+
+
+
+def apply_manual_plan_change(
+    entitlement: Entitlement,
+    *,
+    plan_code: PlanCode,
+    entitlement_status: EntitlementStatus | None = None,
+) -> None:
+    """Apply an administrator plan change with immediately usable defaults."""
+    entitlement.plan_code = plan_code
+
+    if entitlement_status is not None:
+        entitlement.status = entitlement_status
+        return
+
+    entitlement.status = (
+        EntitlementStatus.ACTIVE
+        if plan_code == PlanCode.PRO
+        else EntitlementStatus.EXPIRED
+    )
