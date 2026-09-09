@@ -375,11 +375,16 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
     );
     final principal = TextEditingController();
     final interest = TextEditingController(text: '0');
+    final accounts = await _liabilities.accounts();
+    String paymentType = accounts.isEmpty ? 'outside' : 'account';
+    String? paymentAccountId =
+        accounts.isEmpty ? null : accounts.first['id'].toString();
     DateTime paidOn = DateTime.now();
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
         title: const Text('Record EMI / payment'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -413,6 +418,56 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                 prefixText: '₹ ',
               ),
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: paymentType,
+              decoration: const InputDecoration(labelText: 'Paid from'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'account',
+                  child: Text('My cash / bank account'),
+                ),
+                DropdownMenuItem(
+                  value: 'outside',
+                  child: Text('Outside FinPilot'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setLocal(() {
+                  paymentType = value;
+                  if (value != 'account') paymentAccountId = null;
+                });
+              },
+            ),
+            if (paymentType == 'account') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: paymentAccountId,
+                decoration: const InputDecoration(
+                  labelText: 'Select cash / bank account',
+                ),
+                items: accounts
+                    .map(
+                      (row) => DropdownMenuItem<String>(
+                        value: row['id'].toString(),
+                        child: Text(
+                          row['name'].toString() +
+                              ' • ' +
+                              _money.format(
+                                double.tryParse(
+                                      row['current_balance'].toString(),
+                                    ) ??
+                                    0,
+                              ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setLocal(() => paymentAccountId = value),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -436,8 +491,19 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
               if (total == null ||
                   principalValue == null ||
                   total <= 0 ||
-                  principalValue <= 0) {
+                  principalValue <= 0 ||
+                  (paymentType == 'account' && paymentAccountId == null)) {
                 return;
+              }
+              if (paymentType == 'account') {
+                final selected = accounts.firstWhere(
+                  (row) => row['id'].toString() == paymentAccountId,
+                );
+                final available = double.tryParse(
+                      selected['current_balance']?.toString() ?? '0',
+                    ) ??
+                    0;
+                if (total > available) return;
               }
 
               await _liabilities.recordPayment(
@@ -446,6 +512,8 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                 principalComponent: principalValue,
                 interestComponent: interestValue,
                 paidOn: paidOn,
+                paymentAccountId:
+                    paymentType == 'account' ? paymentAccountId : null,
               );
               if (!context.mounted) return;
                 FocusManager.instance.primaryFocus?.unfocus();
@@ -454,6 +522,7 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
             child: const Text('Record'),
           ),
         ],
+      ),
       ),
     );
 
