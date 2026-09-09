@@ -78,14 +78,16 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         paymentDueDay: paymentDueDay,
       );
       if (!mounted) return;
+
       FocusManager.instance.primaryFocus?.unfocus();
       Navigator.of(context).pop(true);
+      return;
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Unable to create account.');
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Unable to create account.';
+      });
     }
   }
 
