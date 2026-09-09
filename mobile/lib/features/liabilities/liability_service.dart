@@ -19,6 +19,7 @@ class LiabilityService {
     required double interestRate,
     required double emiAmount,
     DateTime? nextDueOn,
+    String? fundingAccountId,
   }) async {
     await _api.dio.post(
       '/liabilities',
@@ -32,6 +33,7 @@ class LiabilityService {
         'emi_amount': emiAmount,
         'next_due_on':
             nextDueOn?.toIso8601String().split('T').first,
+        'funding_account_id': fundingAccountId,
       },
     );
     _api.notifyDataChanged();
@@ -68,6 +70,7 @@ class LiabilityService {
     required double principalComponent,
     required double interestComponent,
     required DateTime paidOn,
+    String? paymentAccountId,
   }) async {
     await _api.dio.post(
       '/liabilities/$liabilityId/payments',
@@ -76,9 +79,21 @@ class LiabilityService {
         'principal_component': principalComponent,
         'interest_component': interestComponent,
         'paid_on': paidOn.toIso8601String().split('T').first,
+        'payment_account_id': paymentAccountId,
       },
     );
     _api.notifyDataChanged();
+  }
+
+  Future<List<Map<String, dynamic>>> accounts() async {
+    final response = await _api.dio.get('/finance/accounts/balances');
+    final rows = (response.data as List<dynamic>?) ?? const [];
+    return rows
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .where((row) =>
+            row['account_type']?.toString() == 'cash' ||
+            row['account_type']?.toString() == 'bank')
+        .toList();
   }
 
   Future<void> deleteLiability(String liabilityId) async {
