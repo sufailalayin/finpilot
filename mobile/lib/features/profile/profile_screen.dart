@@ -59,6 +59,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final status = _status?['status']?.toString() ?? 'unknown';
     final plan = _status?['plan_code']?.toString() ?? 'free';
     final trialEnd = _status?['trial_ends_at']?.toString();
+    final paidUntil = _status?['paid_until']?.toString();
+    final billingPlanName = _status?['billing_plan_name']?.toString();
 
     return Scaffold(
       appBar: AppBar(
@@ -135,9 +137,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  if (trialEnd != null) ...[
+                  if (billingPlanName != null && billingPlanName.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(billingPlanName),
+                  ],
+                  if (status == 'trial' && trialEnd != null) ...[
                     const SizedBox(height: 8),
                     Text('Trial ends: ' + trialEnd),
+                  ],
+                  if (status == 'active' && paidUntil != null) ...[
+                    const SizedBox(height: 8),
+                    Text('Paid until: ' + paidUntil),
                   ],
                   const SizedBox(height: 14),
                   FilledButton(
