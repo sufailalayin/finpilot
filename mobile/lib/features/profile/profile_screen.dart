@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../auth/auth_screen.dart';
@@ -7,6 +8,7 @@ import '../auth/auth_service.dart';
 import '../subscription/paywall_screen.dart';
 import '../subscription/subscription_service.dart';
 import '../security/security_privacy_screen.dart';
+import '../update/app_update_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.api});
@@ -24,6 +26,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Map<String, dynamic>? _status;
   bool _loading = true;
+  bool _checkingUpdate = false;
+  String? _versionText;
 
   @override
   void initState() {
@@ -42,6 +46,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    try {
+      final update = await AppUpdateService(widget.api).check();
+      if (!mounted) return;
+      setState(() {
+        _versionText =
+            'Installed ${update.currentVersion} (${update.currentBuild}) • Latest ${update.latestVersion} (${update.latestBuild})';
+      });
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            update.updateAvailable
+                ? 'FinPilot update available'
+                : 'FinPilot is up to date',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Installed: ${update.currentVersion} (${update.currentBuild})'),
+              const SizedBox(height: 4),
+              Text('Latest: ${update.latestVersion} (${update.latestBuild})'),
+              if (update.releaseNotes != null &&
+                  update.releaseNotes!.trim().isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'What’s new',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(update.releaseNotes!),
+              ],
+              if (update.updateAvailable &&
+                  (update.updateUrl == null ||
+                      update.updateUrl!.trim().isEmpty)) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'An update is configured, but the download link has not been added in Admin yet.',
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+            if (update.updateAvailable &&
+                update.updateUrl != null &&
+                update.updateUrl!.trim().isNotEmpty)
+              FilledButton(
+                onPressed: () async {
+                  final uri = Uri.tryParse(update.updateUrl!.trim());
+                  if (uri == null) return;
+                  Navigator.of(dialogContext).pop();
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+                child: Text(
+                  update.distribution == 'play_store'
+                      ? 'Open Google Play'
+                      : 'Update now',
+                ),
+              ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to check for updates right now.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
     }
   }
 
@@ -190,6 +276,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 builder: (_) => CategoriesScreen(api: widget.api),
               ),
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.system_update_alt),
+            title: const Text('App update'),
+            subtitle: Text(
+              _versionText ??
+                  'Check installed version and available FinPilot updates',
+            ),
+            trailing: _checkingUpdate
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right),
+            onTap: _checkingUpdate ? null : _checkForUpdates,
           ),
           const ListTile(
             leading: Icon(Icons.info_outline),
