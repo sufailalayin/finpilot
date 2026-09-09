@@ -160,3 +160,19 @@ class AdminUserDetail(BaseModel):
 class AdminDeleteUserRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
     confirmation: str = Field(pattern=r"^DELETE$")
+
+
+
+class AppReleaseUpdate(BaseModel):
+    latest_version: str = Field(min_length=1, max_length=40)
+    latest_build_number: int = Field(ge=1)
+    minimum_version: str = Field(min_length=1, max_length=40)
+    minimum_build_number: int = Field(ge=1)
+    update_url: str | None = Field(default=None, max_length=1000)
+    release_notes: str | None = Field(default=None, max_length=5000)
+    distribution: str = Field(default="apk", pattern=r"^(apk|play_store)$")
+    is_update_enabled: bool = True
+
+
+class AppReleaseResponse(AppReleaseUpdate):
+    updated_at: datetime
