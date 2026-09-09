@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
@@ -7,6 +9,7 @@ import '../dashboard/dashboard_screen.dart';
 import '../planning/planning_screen.dart';
 import '../profile/profile_screen.dart';
 import '../subscription/pro_feature_gate.dart';
+import '../subscription/subscription_service.dart';
 import '../transactions/transactions_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -21,6 +24,11 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
   late int _revision;
+  late final SubscriptionService _subscriptions =
+      SubscriptionService(widget.api);
+  Timer? _entitlementTimer;
+  String? _entitlementFingerprint;
+  bool _syncingEntitlement = false;
 
   @override
   void initState() {
@@ -29,6 +37,37 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _revision = widget.api.dataRevision.value;
     widget.api.dataRevision.addListener(_handleRevision);
     widget.api.sessionExpired.addListener(_handleSessionExpired);
+    _syncEntitlement();
+    _entitlementTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _syncEntitlement(),
+    );
+  }
+
+  Future<void> _syncEntitlement() async {
+    if (_syncingEntitlement) return;
+    _syncingEntitlement = true;
+    try {
+      final status = await _subscriptions.status();
+      final fingerprint = [
+        status['plan_code'],
+        status['status'],
+        status['trial_ends_at'],
+        status['paid_until'],
+        status['provider'],
+      ].join('|');
+
+      if (_entitlementFingerprint == null) {
+        _entitlementFingerprint = fingerprint;
+      } else if (_entitlementFingerprint != fingerprint) {
+        _entitlementFingerprint = fingerprint;
+        widget.api.notifyDataChanged();
+      }
+    } catch (_) {
+      // Normal network retry/session handling is managed by ApiClient.
+    } finally {
+      _syncingEntitlement = false;
+    }
   }
 
   void _handleRevision() {
@@ -49,11 +88,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.api.notifyDataChanged();
+      _syncEntitlement();
     }
   }
 
   @override
   void dispose() {
+    _entitlementTimer?.cancel();
     widget.api.dataRevision.removeListener(_handleRevision);
     widget.api.sessionExpired.removeListener(_handleSessionExpired);
     WidgetsBinding.instance.removeObserver(this);
@@ -97,8 +138,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         onDestinationSelected: (value) {
           if (value == _index) {
             widget.api.notifyDataChanged();
+            _syncEntitlement();
           } else {
             setState(() => _index = value);
+            _syncEntitlement();
           }
         },
         destinations: const [
