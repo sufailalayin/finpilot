@@ -1,11 +1,21 @@
-name: FinPilot Android Release
+name: FinPilot Signed Android Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name, e.g. 1.0.0"
+        required: true
+        default: "1.0.0"
+      version_code:
+        description: "Version code, integer"
+        required: true
+        default: "1"
 
 jobs:
-  build-aab:
+  signed-android-release:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - uses: actions/checkout@v4
@@ -14,7 +24,21 @@ jobs:
         with:
           channel: stable
 
-      - name: Generate Android scaffold
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
+        run: |
+          test -n "$KEYSTORE_B64" || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
+          test -n "$STORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD" && exit 1)
+          test -n "$API_BASE_URL" || (echo "Missing FINPILOT_API_BASE_URL repository/environment variable" && exit 1)
+
+      - name: Generate Android project
         run: |
           flutter create --platforms=android --org com.hastronventures --project-name finpilot /tmp/finpilot_release
           rm -rf /tmp/finpilot_release/lib
@@ -22,41 +46,109 @@ jobs:
           cp -R mobile/lib /tmp/finpilot_release/lib
           cp mobile/pubspec.yaml /tmp/finpilot_release/pubspec.yaml
 
-      - name: Install dependencies
+      - name: Apply release version
         working-directory: /tmp/finpilot_release
-        run: flutter pub get
-
-      - name: Configure release signing
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          test -n "$ANDROID_KEYSTORE_BASE64"
-          test -n "$ANDROID_KEYSTORE_PASSWORD"
-          test -n "$ANDROID_KEY_ALIAS"
-          test -n "$ANDROID_KEY_PASSWORD"
+          python - <<'PY'
+          from pathlib import Path
+          import re
 
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/finpilot_release/android/app/upload-keystore.jks
+          path = Path("pubspec.yaml")
+          text = path.read_text()
+          text = re.sub(
+              r"^version:\s*.*$",
+              "version: ${{ inputs.version_name }}+${{ inputs.version_code }}",
+              text,
+              flags=re.MULTILINE,
+          )
+          path.write_text(text)
+          PY
+
+      - name: Prepare biometric host and FinPilot branding
+        run: |
+          cat > /tmp/finpilot_release/android/app/src/main/kotlin/com/hastronventures/finpilot/MainActivity.kt <<'EOF'
+          package com.hastronventures.finpilot
+
+          import io.flutter.embedding.android.FlutterFragmentActivity
+
+          class MainActivity: FlutterFragmentActivity()
+          EOF
+
+          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' /tmp/finpilot_release/android/app/src/main/AndroidManifest.xml
+
+          mkdir -p /tmp/finpilot_release/android/app/src/main/res/drawable
+          mkdir -p /tmp/finpilot_release/android/app/src/main/res/drawable-v21
+
+          cat > /tmp/finpilot_release/android/app/src/main/res/drawable/finpilot_mark.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#185A4A"
+                  android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8Z"/>
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M31,30H77V41H43V50H70V61H43V79H31Z"/>
+              <path
+                  android:fillColor="#A9E4D5"
+                  android:pathData="M62,50H77V61H62Z"/>
+          </vector>
+          EOF
+
+          cat > /tmp/finpilot_release/android/app/src/main/res/drawable/launch_background.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="#F7F9F8" />
+                  </shape>
+              </item>
+              <item
+                  android:width="120dp"
+                  android:height="120dp"
+                  android:gravity="center"
+                  android:drawable="@drawable/finpilot_mark" />
+          </layer-list>
+          EOF
+
+          cp /tmp/finpilot_release/android/app/src/main/res/drawable/launch_background.xml /tmp/finpilot_release/android/app/src/main/res/drawable-v21/launch_background.xml
+          sed -i 's/android:label="finpilot"/android:label="FinPilot"/' /tmp/finpilot_release/android/app/src/main/AndroidManifest.xml
+          sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@drawable/finpilot_mark"#' /tmp/finpilot_release/android/app/src/main/AndroidManifest.xml
+
+      - name: Restore Android signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > /tmp/finpilot_release/android/app/upload-keystore.jks
 
           cat > /tmp/finpilot_release/android/key.properties <<EOF
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
           storeFile=upload-keystore.jks
           EOF
 
+      - name: Configure release signing
+        run: |
           python - <<'PY'
           from pathlib import Path
 
           path = Path("/tmp/finpilot_release/android/app/build.gradle.kts")
           text = path.read_text()
 
-          if 'import java.util.Properties' not in text:
-              text = 'import java.util.Properties\nimport java.io.FileInputStream\n\n' + text
+          if "import java.util.Properties" not in text:
+              text = (
+                  "import java.util.Properties\n"
+                  "import java.io.FileInputStream\n\n"
+                  + text
+              )
 
-          marker = 'android {'
+          marker = "android {"
           insert = '''val keystoreProperties = Properties()
           val keystorePropertiesFile = rootProject.file("key.properties")
           if (keystorePropertiesFile.exists()) {
@@ -67,7 +159,7 @@ jobs:
           text = text.replace(marker, insert + marker, 1)
 
           text = text.replace(
-              '    buildTypes {\n        release {',
+              "    defaultConfig {",
               '''    signingConfigs {
                   create("release") {
                       keyAlias = keystoreProperties["keyAlias"] as String
@@ -77,29 +169,52 @@ jobs:
                   }
               }
 
-              buildTypes {
-                  release {''',
+              defaultConfig {''',
               1,
           )
 
           text = text.replace(
-              '            signingConfig = signingConfigs.getByName("debug")',
-              '            signingConfig = signingConfigs.getByName("release")',
+              'signingConfig = signingConfigs.getByName("debug")',
+              'signingConfig = signingConfigs.getByName("release")',
           )
 
           path.write_text(text)
           PY
 
+      - name: Install dependencies
+        working-directory: /tmp/finpilot_release
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: /tmp/finpilot_release
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build signed release APK
+        working-directory: /tmp/finpilot_release
+        env:
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
+        run: >
+          flutter build apk --release
+          --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
+
       - name: Build signed release AAB
         working-directory: /tmp/finpilot_release
         env:
           API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
-        run: |
-          test -n "$API_BASE_URL"
-          flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
+        run: >
+          flutter build appbundle --release
+          --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
 
-      - name: Upload signed AAB
+      - name: Verify APK signature
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload signed Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: finpilot-release-aab
-          path: /tmp/finpilot_release/build/app/outputs/bundle/release/app-release.aab
+          name: finpilot-signed-android-${{ inputs.version_name }}-${{ inputs.version_code }}
+          retention-days: 14
+          path: |
+            /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk
+            /tmp/finpilot_release/build/app/outputs/bundle/release/app-release.aab
