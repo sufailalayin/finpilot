@@ -15,6 +15,7 @@ from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import Receivable, ReceivableMovement, ReceivableRepayment
 from app.models.user import SecurityAuditEvent, User
 from app.schemas.security_privacy import (
     AccountDeleteRequest,
@@ -123,6 +124,9 @@ async def export_account_data(
         "liabilities": await _rows(db, Liability, user.id),
         "liability_payments": await _rows(db, LiabilityPayment, user.id),
         "assets": await _rows(db, Asset, user.id),
+        "receivables": await _rows(db, Receivable, user.id),
+        "receivable_repayments": await _rows(db, ReceivableRepayment, user.id),
+        "receivable_movements": await _rows(db, ReceivableMovement, user.id),
     }
     db.add(
         SecurityAuditEvent(
