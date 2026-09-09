@@ -21,12 +21,28 @@ def test_production_rejects_default_jwt_secret():
         validate_production_settings(settings)
 
 
-def test_production_accepts_required_values():
+def test_production_rejects_log_only_email_delivery():
     settings = Settings(
         environment="production",
         database_url="postgresql+asyncpg://user:pass@db/finpilot",
         cors_origins="https://admin.example.com",
         jwt_secret="a-very-long-production-secret",
+        email_delivery_mode="log",
+    )
+
+    with pytest.raises(ProductionConfigError):
+        validate_production_settings(settings)
+
+
+def test_production_accepts_resend_email_delivery():
+    settings = Settings(
+        environment="production",
+        database_url="postgresql+asyncpg://user:pass@db/finpilot",
+        cors_origins="https://admin.example.com",
+        jwt_secret="a-very-long-production-secret",
+        email_delivery_mode="resend",
+        resend_api_key="re_test_key",
+        resend_from_email="no-reply@example.com",
     )
 
     validate_production_settings(settings)
