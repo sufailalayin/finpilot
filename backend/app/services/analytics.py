@@ -58,6 +58,12 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     net = income - expenses
     savings_rate = float((net / income) * 100) if income > 0 else 0.0
 
+    # A health score is only meaningful after the user records real
+    # cash-flow activity. Without income/expense data, default component
+    # points (for no debt, no budget overruns, etc.) can look like a real
+    # score even though there is nothing to assess.
+    health_score_available = income > 0 or expenses > 0
+
     category_rows = (
         await db.execute(
             select(
@@ -285,8 +291,13 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
         ),
     )
 
+    if not health_score_available:
+        score = 0
+
     health_grade = (
-        "Excellent"
+        "Not enough data"
+        if not health_score_available
+        else "Excellent"
         if score >= 85
         else "Strong"
         if score >= 70
@@ -429,6 +440,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
         "net": net,
         "savings_rate": round(savings_rate, 1),
         "financial_health_score": score,
+        "health_score_available": health_score_available,
         "health_grade": health_grade,
         "health_components": health_components,
         "top_categories": top_categories,
