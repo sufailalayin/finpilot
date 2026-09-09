@@ -18,39 +18,78 @@ class _AppLockScreenState extends State<AppLockScreen> {
   final _security = AppSecurityService();
   final _pin = TextEditingController();
   bool _checkingBiometric = false;
+  bool _biometricEnabled = false;
+  bool _unlockingPin = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tryBiometric();
+    _prepareUnlock();
+  }
+
+  Future<void> _prepareUnlock() async {
+    final enabled = await _security.isBiometricEnabled();
+    if (!mounted) return;
+    setState(() => _biometricEnabled = enabled);
+
+    if (!enabled) return;
+
+    // Give Android/Flutter lifecycle a moment to fully resume before opening
+    // the biometric prompt. This avoids intermittent cold-start failures.
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted) return;
+    await _tryBiometric();
   }
 
   Future<void> _tryBiometric() async {
-    if (_checkingBiometric) return;
-    setState(() => _checkingBiometric = true);
+    if (_checkingBiometric || !_biometricEnabled) return;
+
+    setState(() {
+      _checkingBiometric = true;
+      _error = null;
+    });
+
     final ok = await _security.authenticateBiometric();
     if (!mounted) return;
+
     if (ok) {
       widget.onUnlocked();
       return;
     }
-    setState(() => _checkingBiometric = false);
+
+    setState(() {
+      _checkingBiometric = false;
+      _error = 'Biometric unlock was not completed. You can use your PIN.';
+    });
   }
 
   Future<void> _unlockWithPin() async {
+    if (_unlockingPin) return;
+
     final value = _pin.text.trim();
     if (value.length < 4) {
       setState(() => _error = 'Enter your app PIN.');
       return;
     }
+
+    setState(() {
+      _unlockingPin = true;
+      _error = null;
+    });
+
     final ok = await _security.verifyPin(value);
     if (!mounted) return;
+
     if (ok) {
       widget.onUnlocked();
-    } else {
-      setState(() => _error = 'Incorrect PIN.');
+      return;
     }
+
+    setState(() {
+      _unlockingPin = false;
+      _error = 'Incorrect PIN.';
+    });
   }
 
   @override
@@ -114,23 +153,24 @@ class _AppLockScreenState extends State<AppLockScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: _unlockWithPin,
-                      child: const Text('Unlock'),
+                      onPressed: _unlockingPin ? null : _unlockWithPin,
+                      child: Text(_unlockingPin ? 'Unlocking...' : 'Unlock'),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _checkingBiometric ? null : _tryBiometric,
-                      icon: const Icon(Icons.fingerprint),
-                      label: Text(
-                        _checkingBiometric
-                            ? 'Checking biometrics...'
-                            : 'Use biometrics',
+                  if (_biometricEnabled)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _checkingBiometric ? null : _tryBiometric,
+                        icon: const Icon(Icons.fingerprint),
+                        label: Text(
+                          _checkingBiometric
+                              ? 'Checking biometrics...'
+                              : 'Use biometrics',
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
