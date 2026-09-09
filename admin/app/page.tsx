@@ -25,6 +25,7 @@ type Overview = {
   assets: number;
   liabilities: number;
   security_events_24h: number;
+  unverified_users: number;
 };
 
 type UserRow = {
@@ -33,6 +34,7 @@ type UserRow = {
   full_name: string | null;
   user_status: string;
   is_admin: boolean;
+  email_verified: boolean;
   entitlement_status: string | null;
   plan_code: string | null;
   trial_ends_at: string | null;
@@ -183,6 +185,7 @@ export default function AdminDashboard() {
     ["Active trials", overview?.active_trials ?? "—", "Conversion opportunity"],
     ["Transactions", overview?.transactions ?? "—", "Finance records created"],
     ["AI requests", overview?.ai_requests ?? "—", `${ai?.requests_24h ?? "—"} in last 24h`],
+    ["Unverified email", overview?.unverified_users ?? "—", "Signup verification pending"],
   ];
 
   return (
@@ -431,7 +434,7 @@ function UsersTable({ users, onManage }: { users: UserRow[]; onManage?: (user: U
       <table>
         <thead>
           <tr>
-            <th>Name</th><th>Email</th><th>Account</th><th>Plan</th><th>Entitlement</th><th>Trial ends</th><th>Paid until</th><th>Joined</th>{onManage ? <th>Control</th> : null}
+            <th>Name</th><th>Email</th><th>Email verified</th><th>Account</th><th>Plan</th><th>Entitlement</th><th>Trial ends</th><th>Paid until</th><th>Joined</th>{onManage ? <th>Control</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -439,6 +442,7 @@ function UsersTable({ users, onManage }: { users: UserRow[]; onManage?: (user: U
             <tr key={user.id}>
               <td>{user.full_name ?? "—"} {user.is_admin ? <span className="badge">Admin</span> : null}</td>
               <td>{user.email}</td>
+              <td><span className={user.email_verified ? "badge good" : "badge warn"}>{user.email_verified ? "Verified" : "Pending"}</span></td>
               <td><span className={badgeClass(user.user_status)}>{user.user_status}</span></td>
               <td><span className={badgeClass(user.plan_code)}>{user.plan_code ?? "—"}</span></td>
               <td><span className={badgeClass(user.entitlement_status)}>{user.entitlement_status ?? "—"}</span></td>
@@ -448,7 +452,7 @@ function UsersTable({ users, onManage }: { users: UserRow[]; onManage?: (user: U
               {onManage ? <td><button className="btn" onClick={() => onManage(user)}>Manage</button></td> : null}
             </tr>
           ))}
-          {!users.length && <tr><td colSpan={onManage ? 9 : 8} className="empty">No users found.</td></tr>}
+          {!users.length && <tr><td colSpan={onManage ? 10 : 9} className="empty">No users found.</td></tr>}
         </tbody>
       </table>
     </div>
