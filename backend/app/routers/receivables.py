@@ -7,13 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.entitlements import require_pro_user
-from app.models.receivable import Receivable, ReceivableRepayment
+from app.models.finance import FinanceAccount
+from app.models.receivable import Receivable, ReceivableMovement, ReceivableRepayment
 from app.models.user import User
 from app.schemas.receivable import (
     ReceivableCreate,
     ReceivableDetailResponse,
     ReceivableOverview,
     ReceivableRepaymentCreate,
+    ReceivableMovementCreate,
+    ReceivableMovementResponse,
     ReceivableRepaymentResponse,
     ReceivableResponse,
     ReceivableUpdate,
@@ -40,6 +43,110 @@ def _serialize(item: Receivable) -> ReceivableResponse:
         note=item.note,
         created_at=item.created_at,
     )
+
+
+@router.post("/movements", response_model=ReceivableMovementResponse, status_code=status.HTTP_201_CREATED)
+async def create_movement(
+    payload: ReceivableMovementCreate,
+    user: User = Depends(require_pro_user),
+    db: AsyncSession = Depends(get_db),
+) -> ReceivableMovementResponse:
+    if payload.source_type == payload.destination_type == "outside":
+        raise HTTPException(status_code=400, detail="Outside to outside movement is not tracked")
+    if payload.source_type == "account" and payload.source_account_id is None:
+        raise HTTPException(status_code=400, detail="Source account is required")
+    if payload.destination_type == "account" and payload.destination_account_id is None:
+        raise HTTPException(status_code=400, detail="Destination account is required")
+    if payload.source_type == "person" and payload.source_receivable_id is None:
+        raise HTTPException(status_code=400, detail="Source person is required")
+    if payload.destination_type == "person" and payload.destination_receivable_id is None:
+        raise HTTPException(status_code=400, detail="Destination person is required")
+
+    source_account = None
+    destination_account = None
+    source_person = None
+    destination_person = None
+
+    if payload.source_account_id is not None:
+        source_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.source_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if source_account is None:
+            raise HTTPException(status_code=404, detail="Source account not found")
+
+    if payload.destination_account_id is not None:
+        destination_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.destination_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if destination_account is None:
+            raise HTTPException(status_code=404, detail="Destination account not found")
+
+    if payload.source_receivable_id is not None:
+        source_person = await db.scalar(
+            select(Receivable).where(
+                Receivable.id == payload.source_receivable_id,
+                Receivable.user_id == user.id,
+            )
+        )
+        if source_person is None:
+            raise HTTPException(status_code=404, detail="Source person not found")
+
+    if payload.destination_receivable_id is not None:
+        destination_person = await db.scalar(
+            select(Receivable).where(
+                Receivable.id == payload.destination_receivable_id,
+                Receivable.user_id == user.id,
+            )
+        )
+        if destination_person is None:
+            raise HTTPException(status_code=404, detail="Destination person not found")
+
+    if source_person is not None:
+        remaining = source_person.original_amount - source_person.amount_received
+        if payload.amount > remaining:
+            raise HTTPException(status_code=400, detail="Amount exceeds source person's pending balance")
+        source_person.amount_received += payload.amount
+
+    if destination_person is not None:
+        destination_person.original_amount += payload.amount
+
+    movement = ReceivableMovement(
+        user_id=user.id,
+        **payload.model_dump(),
+    )
+    db.add(movement)
+    await db.commit()
+    await db.refresh(movement)
+    return ReceivableMovementResponse.model_validate(movement, from_attributes=True)
+
+
+@router.get("/movements", response_model=list[ReceivableMovementResponse])
+async def list_movements(
+    user: User = Depends(require_pro_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ReceivableMovementResponse]:
+    rows = list(
+        (
+            await db.execute(
+                select(ReceivableMovement)
+                .where(ReceivableMovement.user_id == user.id)
+                .order_by(
+                    ReceivableMovement.occurred_on.desc(),
+                    ReceivableMovement.created_at.desc(),
+                )
+            )
+        ).scalars().all()
+    )
+    return [
+        ReceivableMovementResponse.model_validate(row, from_attributes=True)
+        for row in rows
+    ]
 
 
 @router.post("", response_model=ReceivableResponse, status_code=status.HTTP_201_CREATED)
