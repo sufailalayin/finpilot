@@ -4,8 +4,9 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: ["main"]
+  workflow_run:
+    workflows: ["FinPilot CI"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version_name:
@@ -19,12 +20,20 @@ on:
 
 jobs:
   signed-android-release:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        startsWith(github.event.workflow_run.head_commit.message, 'release:')
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Resolve release version
         id: version
