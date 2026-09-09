@@ -3,24 +3,15 @@ import 'dart:async';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 class PlayBillingService {
-  PlayBillingService({
-    this.monthlyProductId = 'finpilot_pro_monthly',
-    this.yearlyProductId = 'finpilot_pro_yearly',
-  });
-
-  final String monthlyProductId;
-  final String yearlyProductId;
   final InAppPurchase _billing = InAppPurchase.instance;
 
   Stream<List<PurchaseDetails>> get purchaseStream => _billing.purchaseStream;
 
   Future<bool> isAvailable() => _billing.isAvailable();
 
-  Future<List<ProductDetails>> loadProducts() async {
-    final response = await _billing.queryProductDetails({
-      monthlyProductId,
-      yearlyProductId,
-    });
+  Future<List<ProductDetails>> loadProducts(Set<String> productIds) async {
+    if (productIds.isEmpty) return const [];
+    final response = await _billing.queryProductDetails(productIds);
     return response.productDetails;
   }
 
