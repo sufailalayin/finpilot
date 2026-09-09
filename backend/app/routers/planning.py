@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.planning import (
     BudgetCreate,
     BudgetResponse,
+    BudgetUpdate,
     BudgetDashboard,
     BudgetPerformance,
     GoalContribution,
@@ -22,6 +23,7 @@ from app.schemas.planning import (
     GoalPlan,
     SavingsGoalCreate,
     SavingsGoalResponse,
+    SavingsGoalUpdate,
 )
 
 router = APIRouter(prefix="/planning", tags=["planning"])
@@ -50,6 +52,61 @@ async def create_budget(
     return BudgetResponse.model_validate(budget)
 
 
+@router.patch("/budgets/{budget_id}", response_model=BudgetResponse)
+async def update_budget(
+    budget_id: uuid.UUID,
+    payload: BudgetUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BudgetResponse:
+    budget = await db.scalar(
+        select(Budget).where(Budget.id == budget_id, Budget.user_id == user.id)
+    )
+    if budget is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+
+    values = payload.model_dump(exclude_unset=True)
+    if values.get("category_id") is not None:
+        category = await db.scalar(
+            select(Category).where(
+                Category.id == values["category_id"],
+                Category.user_id == user.id,
+            )
+        )
+        if category is None:
+            raise HTTPException(status_code=404, detail="Category not found")
+
+    for field, value in values.items():
+        if field == "name" and value is not None:
+            value = value.strip()
+        setattr(budget, field, value)
+
+    if budget.period_end < budget.period_start:
+        raise HTTPException(
+            status_code=400,
+            detail="period_end must be on or after period_start",
+        )
+
+    await db.commit()
+    await db.refresh(budget)
+    return BudgetResponse.model_validate(budget)
+
+
+@router.delete("/budgets/{budget_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_budget(
+    budget_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    budget = await db.scalar(
+        select(Budget).where(Budget.id == budget_id, Budget.user_id == user.id)
+    )
+    if budget is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    await db.delete(budget)
+    await db.commit()
+
+
 @router.get("/budgets", response_model=list[BudgetResponse])
 async def list_budgets(
     user: User = Depends(get_current_user),
@@ -75,6 +132,56 @@ async def create_goal(
     await db.commit()
     await db.refresh(goal)
     return SavingsGoalResponse.model_validate(goal)
+
+
+@router.patch("/goals/{goal_id}", response_model=SavingsGoalResponse)
+async def update_goal(
+    goal_id: uuid.UUID,
+    payload: SavingsGoalUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SavingsGoalResponse:
+    goal = await db.scalar(
+        select(SavingsGoal).where(
+            SavingsGoal.id == goal_id,
+            SavingsGoal.user_id == user.id,
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "name" and value is not None:
+            value = value.strip()
+        setattr(goal, field, value)
+
+    if goal.current_amount > goal.target_amount:
+        raise HTTPException(
+            status_code=400,
+            detail="current_amount cannot exceed target_amount",
+        )
+
+    await db.commit()
+    await db.refresh(goal)
+    return SavingsGoalResponse.model_validate(goal)
+
+
+@router.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_goal(
+    goal_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    goal = await db.scalar(
+        select(SavingsGoal).where(
+            SavingsGoal.id == goal_id,
+            SavingsGoal.user_id == user.id,
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    await db.delete(goal)
+    await db.commit()
 
 
 @router.get("/goals", response_model=list[SavingsGoalResponse])
