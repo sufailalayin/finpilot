@@ -13,6 +13,19 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     trial_days: int = 7
 
+    otp_expiry_minutes: int = 10
+    otp_resend_seconds: int = 60
+    otp_max_attempts: int = 5
+
+    email_delivery_mode: str = "log"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "no-reply@finpilot.app"
+    smtp_from_name: str = "FinPilot"
+    smtp_use_tls: bool = True
+
     google_play_package_name: str = ""
     google_play_monthly_product_id: str = "finpilot_pro_monthly"
     google_play_yearly_product_id: str = "finpilot_pro_yearly"
