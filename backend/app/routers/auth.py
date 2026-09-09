@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import SecurityAuditEvent, User, UserLocation, UserStatus
 from app.schemas.auth import (
+    AdminMfaVerifyRequest,
     ForgotPasswordRequest,
     GenericAuthMessage,
     LoginRequest,
@@ -423,6 +424,111 @@ async def reset_password(
 
     return GenericAuthMessage(
         message="Password changed successfully. Please sign in again.",
+    )
+
+
+
+
+@router.post("/admin/mfa/request", response_model=OtpRequestResponse)
+async def request_admin_mfa(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OtpRequestResponse:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
+
+    try:
+        _, code = await issue_otp(
+            db,
+            email=user.email,
+            purpose="admin_login",
+        )
+    except OtpCooldownError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting another administrator code",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+
+    try:
+        await send_otp_email(
+            to_email=user.email,
+            code=code,
+            purpose="admin_login",
+        )
+    except EmailDeliveryError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to send administrator verification code",
+        ) from exc
+
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="admin_mfa_otp_sent",
+            description="Administrator MFA code requested.",
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+    )
+    await db.commit()
+
+    return _otp_response(
+        user.email,
+        "A 6-digit administrator verification code was sent.",
+    )
+
+
+@router.post("/admin/mfa/verify", response_model=TokenResponse)
+async def verify_admin_mfa(
+    payload: AdminMfaVerifyRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
+
+    try:
+        await verify_otp(
+            db,
+            email=user.email,
+            purpose="admin_login",
+            code=payload.code,
+        )
+    except OtpVerificationError as exc:
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="admin_mfa_verified",
+            description="Administrator MFA verification completed.",
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+    )
+    await db.commit()
+
+    return TokenResponse(
+        access_token=create_access_token(
+            str(user.id),
+            user.token_version,
+            admin_mfa=True,
+        ),
+        user=UserResponse.model_validate(user),
     )
 
 
