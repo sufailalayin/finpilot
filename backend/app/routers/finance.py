@@ -11,6 +11,7 @@ from app.dependencies.auth import get_current_user
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
+from app.models.receivable import Receivable
 from app.models.user import User
 from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
 
@@ -411,6 +412,19 @@ async def net_worth_summary(
     )
     investment_assets = investment_assets or Decimal("0.00")
 
+    receivables = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Receivable.original_amount - Receivable.amount_received),
+                Decimal("0.00"),
+            )
+        ).where(
+            Receivable.user_id == user.id,
+            Receivable.amount_received < Receivable.original_amount,
+        )
+    )
+    receivables = receivables or Decimal("0.00")
+
     liabilities = await db.scalar(
         select(
             func.coalesce(
@@ -424,7 +438,8 @@ async def net_worth_summary(
     return NetWorthResponse(
         account_assets=account_assets,
         investment_assets=investment_assets,
-        total_assets=account_assets + investment_assets,
+        receivables=receivables,
+        total_assets=account_assets + investment_assets + receivables,
         liabilities=liabilities,
-        net_worth=account_assets + investment_assets - liabilities,
+        net_worth=account_assets + investment_assets + receivables - liabilities,
     )
