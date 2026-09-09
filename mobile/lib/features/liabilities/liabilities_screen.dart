@@ -42,7 +42,11 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
     final outstanding = TextEditingController();
     final rate = TextEditingController(text: '0');
     final emi = TextEditingController(text: '0');
+    final accounts = await _liabilities.accounts();
     String type = 'personal_loan';
+    String destinationType = accounts.isEmpty ? 'outside' : 'account';
+    String? fundingAccountId =
+        accounts.isEmpty ? null : accounts.first['id'].toString();
     DateTime? due;
 
     final saved = await showDialog<bool>(
@@ -97,6 +101,39 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                   controller: lender,
                   decoration: const InputDecoration(labelText: 'Lender'),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: destinationType,
+                  decoration: const InputDecoration(
+                    labelText: 'Borrowed money received into',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'account', child: Text('My cash / bank account')),
+                    DropdownMenuItem(value: 'outside', child: Text('Outside FinPilot')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setLocal(() {
+                      destinationType = value;
+                      if (value != 'account') fundingAccountId = null;
+                    });
+                  },
+                ),
+                if (destinationType == 'account') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: fundingAccountId,
+                    decoration: const InputDecoration(labelText: 'Select cash / bank account'),
+                    items: accounts.map((row) => DropdownMenuItem<String>(
+                      value: row['id'].toString(),
+                      child: Text(
+                        row['name'].toString() + ' • ' +
+                        _money.format(double.tryParse(row['current_balance'].toString()) ?? 0),
+                      ),
+                    )).toList(),
+                    onChanged: (value) => setLocal(() => fundingAccountId = value),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: original,
@@ -184,7 +221,8 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                     originalValue == null ||
                     outstandingValue == null ||
                     originalValue <= 0 ||
-                    outstandingValue <= 0) {
+                    outstandingValue <= 0 ||
+                    (destinationType == 'account' && fundingAccountId == null)) {
                   return;
                 }
 
@@ -197,6 +235,8 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
                   interestRate: rateValue,
                   emiAmount: emiValue,
                   nextDueOn: due,
+                  fundingAccountId:
+                      destinationType == 'account' ? fundingAccountId : null,
                 );
                 if (!context.mounted) return;
                 FocusManager.instance.primaryFocus?.unfocus();
