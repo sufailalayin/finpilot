@@ -20,7 +20,7 @@ export default function PrivacyPage() {
 
         <span className="eyebrow">Legal</span>
         <h1>Privacy Policy</h1>
-        <p className="legal-updated">Last updated: 9 September 2026</p>
+        <p className="legal-updated">Last updated: 10 September 2026</p>
 
         <p>
           FinPilot is a personal finance application designed to help users
@@ -71,6 +71,28 @@ export default function PrivacyPage() {
           configuration controls. No system can guarantee absolute security.
         </p>
 
+        <h2>Backups, availability and data loss</h2>
+        <p>
+          FinPilot may maintain periodic infrastructure or database backups for
+          service continuity and disaster recovery. Backups are not a guarantee
+          that every item or version of data can always be recovered. Users
+          should maintain independent copies or exports of important financial
+          records. To the maximum extent permitted by applicable law, FinPilot
+          and Hastron Ventures will not be liable for loss, corruption,
+          deletion or unavailability of data resulting from circumstances
+          outside our reasonable control. Nothing in this Policy excludes any
+          right, remedy or liability that cannot lawfully be excluded.
+        </p>
+
+        <h2>Your privacy choices and rights</h2>
+        <p>
+          Subject to applicable law, users may request access to information
+          about their personal data, correction or completion of inaccurate
+          information, erasure where applicable, withdrawal of consent where
+          processing is based on consent, and may raise a grievance. We may
+          verify identity before acting on a request.
+        </p>
+
         <h2>Data export and deletion</h2>
         <p>
           Users can export supported FinPilot data from Security &amp; Privacy.
@@ -119,6 +141,7 @@ export default function PrivacyPage() {
         </p>
 
         <div className="legal-links">
+          <a href="/terms">Terms of Service</a>
           <a href="/account-deletion">Account deletion</a>
         </div>
       </article>
