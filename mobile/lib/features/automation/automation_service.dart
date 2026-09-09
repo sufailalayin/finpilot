@@ -24,6 +24,8 @@ class AutomationService {
     String? provider,
     int reminderDaysBefore = 3,
     bool autoRenew = false,
+    DateTime? billGeneratedOn,
+    String? cardLast4,
   }) async {
     await _api.dio.post(
       '/automation/bills',
@@ -33,6 +35,9 @@ class AutomationService {
         'provider': provider?.trim().isEmpty == true ? null : provider?.trim(),
         'amount': amount,
         'due_on': dueOn.toIso8601String().split('T').first,
+        'bill_generated_on':
+            billGeneratedOn?.toIso8601String().split('T').first,
+        'card_last4': cardLast4?.trim().isEmpty == true ? null : cardLast4?.trim(),
         'frequency': frequency,
         'reminder_days_before': reminderDaysBefore,
         'auto_renew': autoRenew,
@@ -51,6 +56,8 @@ class AutomationService {
     String? provider,
     required int reminderDaysBefore,
     required bool autoRenew,
+    DateTime? billGeneratedOn,
+    String? cardLast4,
   }) async {
     await _api.dio.patch(
       '/automation/bills/$billId',
@@ -60,6 +67,9 @@ class AutomationService {
         'provider': provider?.trim().isEmpty == true ? null : provider?.trim(),
         'amount': amount,
         'due_on': dueOn.toIso8601String().split('T').first,
+        'bill_generated_on':
+            billGeneratedOn?.toIso8601String().split('T').first,
+        'card_last4': cardLast4?.trim().isEmpty == true ? null : cardLast4?.trim(),
         'frequency': frequency,
         'reminder_days_before': reminderDaysBefore,
         'auto_renew': autoRenew,
