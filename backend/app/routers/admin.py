@@ -342,16 +342,61 @@ async def update_user(
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid entitlement status") from exc
 
-        if payload.plan_code is not None or payload.entitlement_status is not None:
+        selected_billing_plan = None
+        if payload.billing_plan_id is not None:
+            try:
+                billing_plan_uuid = uuid.UUID(payload.billing_plan_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid billing plan id") from exc
+
+            selected_billing_plan = await db.scalar(
+                select(BillingPlan).where(
+                    BillingPlan.id == billing_plan_uuid,
+                    BillingPlan.is_active.is_(True),
+                )
+            )
+            if selected_billing_plan is None:
+                raise HTTPException(status_code=404, detail="Billing plan not found")
+
+            entitlement.billing_plan_id = selected_billing_plan.id
+            requested_plan = (
+                PlanCode.PRO
+                if selected_billing_plan.access_level == "pro"
+                else PlanCode.FREE
+            )
+
+        if (
+            payload.plan_code is not None
+            or payload.entitlement_status is not None
+            or selected_billing_plan is not None
+        ):
             apply_manual_plan_change(
                 entitlement,
                 plan_code=requested_plan,
                 entitlement_status=requested_status,
             )
+
         if "trial_ends_at" in payload.model_fields_set:
             entitlement.trial_ends_at = payload.trial_ends_at
+        elif entitlement.status != EntitlementStatus.TRIAL:
+            entitlement.trial_ends_at = None
+
         if "paid_until" in payload.model_fields_set:
             entitlement.paid_until = payload.paid_until
+        elif (
+            selected_billing_plan is not None
+            and entitlement.status == EntitlementStatus.ACTIVE
+            and entitlement.plan_code == PlanCode.PRO
+        ):
+            now = _utcnow()
+            if selected_billing_plan.billing_period == "monthly":
+                entitlement.paid_until = now + timedelta(days=30)
+            elif selected_billing_plan.billing_period == "quarterly":
+                entitlement.paid_until = now + timedelta(days=90)
+            elif selected_billing_plan.billing_period == "yearly":
+                entitlement.paid_until = now + timedelta(days=365)
+            elif selected_billing_plan.billing_period == "lifetime":
+                entitlement.paid_until = None
 
     after = _state(user, entitlement)
     if before == after:
@@ -389,6 +434,8 @@ async def update_user(
         email_verified=user.email_verified,
         entitlement_status=entitlement.status.value if entitlement else None,
         plan_code=entitlement.plan_code.value if entitlement else None,
+        billing_plan_id=str(entitlement.billing_plan_id) if entitlement and entitlement.billing_plan_id else None,
+        billing_plan_name=selected_billing_plan.name if entitlement and selected_billing_plan else None,
         trial_ends_at=entitlement.trial_ends_at if entitlement else None,
         paid_until=entitlement.paid_until if entitlement else None,
         created_at=user.created_at,
