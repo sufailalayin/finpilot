@@ -46,6 +46,17 @@ class DashboardAlert(BaseModel):
     due_on: date | None = None
 
 
+class DashboardUpcomingBill(BaseModel):
+    id: str
+    name: str
+    bill_type: str
+    amount: Decimal
+    due_on: date
+    bill_generated_on: date | None = None
+    provider: str | None = None
+    card_last4: str | None = None
+
+
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     accounts: list[AccountBalance]
@@ -62,3 +73,4 @@ class DashboardResponse(BaseModel):
     upcoming_alert_count: int
     insights: list[DashboardInsight]
     alerts: list[DashboardAlert]
+    upcoming_bills: list[DashboardUpcomingBill]
