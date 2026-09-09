@@ -10,6 +10,7 @@ from app.models.automation import BillReminder
 from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics, build_report
 
 
@@ -84,7 +85,26 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             )
         )
         totals = totals_result.one()
-        balance = account.opening_balance + totals.income - totals.expense
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user_id)
+        )
+        balance = (
+            account.opening_balance
+            + totals.income
+            - totals.expense
+            + (receivable_movement or Decimal("0.00"))
+        )
         total_balance += balance
         account_balances.append(
             {
@@ -155,7 +175,20 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         ).where(Liability.user_id == user_id)
     )
     liabilities = liabilities or Decimal("0.00")
-    net_worth = total_balance + investment_assets - liabilities
+
+    receivables = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Receivable.original_amount - Receivable.amount_received),
+                Decimal("0.00"),
+            )
+        ).where(
+            Receivable.user_id == user_id,
+            Receivable.amount_received < Receivable.original_amount,
+        )
+    )
+    receivables = receivables or Decimal("0.00")
+    net_worth = total_balance + investment_assets + receivables - liabilities
 
     active_budgets = list(
         (
@@ -319,6 +352,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         "recent_transactions": recent,
         "net_worth": net_worth,
         "investment_assets": investment_assets,
+        "receivables": receivables,
         "liabilities": liabilities,
         "savings_rate": analytics["savings_rate"],
         "financial_health_score": analytics["financial_health_score"],
