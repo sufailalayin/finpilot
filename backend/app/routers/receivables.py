@@ -157,6 +157,20 @@ async def create_receivable(
 ) -> ReceivableResponse:
     if payload.due_on is not None and payload.due_on < payload.given_on:
         raise HTTPException(status_code=400, detail="Due date cannot be before given date")
+    if payload.source_type == "account" and payload.source_account_id is None:
+        raise HTTPException(status_code=400, detail="Source account is required")
+
+    source_account = None
+    if payload.source_account_id is not None:
+        source_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.source_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if source_account is None:
+            raise HTTPException(status_code=404, detail="Source account not found")
+
     item = Receivable(
         user_id=user.id,
         person_name=payload.person_name.strip(),
@@ -168,6 +182,23 @@ async def create_receivable(
         note=payload.note.strip() if payload.note else None,
     )
     db.add(item)
+    await db.flush()
+
+    db.add(
+        ReceivableMovement(
+            user_id=user.id,
+            source_type=payload.source_type,
+            destination_type="person",
+            source_account_id=payload.source_account_id,
+            destination_account_id=None,
+            source_receivable_id=None,
+            destination_receivable_id=item.id,
+            amount=payload.original_amount,
+            occurred_on=payload.given_on,
+            note=payload.note.strip() if payload.note else None,
+        )
+    )
+
     await db.commit()
     await db.refresh(item)
     return _serialize(item)
@@ -291,6 +322,19 @@ async def record_repayment(
     if payload.amount > remaining:
         raise HTTPException(status_code=400, detail="Repayment exceeds pending amount")
 
+    if payload.destination_type == "account" and payload.destination_account_id is None:
+        raise HTTPException(status_code=400, detail="Destination account is required")
+
+    if payload.destination_account_id is not None:
+        destination_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.destination_account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if destination_account is None:
+            raise HTTPException(status_code=404, detail="Destination account not found")
+
     payment = ReceivableRepayment(
         receivable_id=item.id,
         user_id=user.id,
@@ -303,6 +347,20 @@ async def record_repayment(
         item.amount_received = item.original_amount
 
     db.add(payment)
+    db.add(
+        ReceivableMovement(
+            user_id=user.id,
+            source_type="person",
+            destination_type=payload.destination_type,
+            source_account_id=None,
+            destination_account_id=payload.destination_account_id,
+            source_receivable_id=item.id,
+            destination_receivable_id=None,
+            amount=payload.amount,
+            occurred_on=payload.received_on,
+            note=payload.note.strip() if payload.note else None,
+        )
+    )
     await db.commit()
     await db.refresh(payment)
     return ReceivableRepaymentResponse.model_validate(payment)
