@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.asset import Asset
 from app.models.automation import BillReminder
 from app.models.finance import FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics, build_report
@@ -99,11 +99,29 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
                 )
             ).where(ReceivableMovement.user_id == user_id)
         )
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user_id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user_id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
         balance = (
             account.opening_balance
             + totals.income
             - totals.expense
             + (receivable_movement or Decimal("0.00"))
+            + (liability_inflow or Decimal("0.00"))
+            - (liability_outflow or Decimal("0.00"))
         )
         total_balance += balance
         account_balances.append(
