@@ -54,6 +54,7 @@ class DashboardResponse(BaseModel):
     liabilities: Decimal
     savings_rate: float
     financial_health_score: int
+    health_score_available: bool
     health_grade: str
     active_budget_count: int
     budget_warning_count: int
