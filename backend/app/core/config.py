@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     otp_test_code: str = ""
 
     email_delivery_mode: str = "log"
+
+    resend_api_key: str = ""
+    resend_from_email: str = ""
+    resend_from_name: str = "FinPilot"
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
