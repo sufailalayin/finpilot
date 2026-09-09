@@ -42,6 +42,17 @@ async def get_current_user(
     if claims["ver"] != user.token_version:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
 
+    path = request.url.path
+    access_exempt = (
+        path.startswith("/api/v1/subscriptions/status")
+        or path.startswith("/api/v1/subscriptions/plans")
+        or path.startswith("/api/v1/subscriptions/google-play/verify")
+        or path.startswith("/api/v1/admin")
+        or path.startswith("/api/v1/auth")
+        or path.startswith("/api/v1/app-release")
+        or path.startswith("/api/v1/security")
+    )
+
     entitlement = user.entitlement
     if entitlement is not None:
         previous_status = entitlement.status
@@ -53,16 +64,6 @@ async def get_current_user(
             or entitlement.plan_code != previous_plan
         ):
             await db.commit()
-
-        path = request.url.path
-        access_exempt = (
-            path.startswith("/api/v1/subscriptions/status")
-            or path.startswith("/api/v1/subscriptions/plans")
-            or path.startswith("/api/v1/subscriptions/google-play/verify")
-            or path.startswith("/api/v1/admin")
-            or path.startswith("/api/v1/auth")
-            or path.startswith("/api/v1/app-release")
-        )
 
         if (
             not user.is_admin
@@ -76,5 +77,10 @@ async def get_current_user(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail="FinPilot trial or subscription has ended",
             )
+    elif not user.is_admin and not access_exempt:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="FinPilot access entitlement is unavailable",
+        )
 
     return user
