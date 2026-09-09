@@ -17,7 +17,12 @@ def verify_password(password: str, password_hash: str) -> bool:
     return password_context.verify(password, password_hash)
 
 
-def create_access_token(subject: str, token_version: int = 0) -> str:
+def create_access_token(
+    subject: str,
+    token_version: int = 0,
+    *,
+    admin_mfa: bool = False,
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": subject,
@@ -27,6 +32,7 @@ def create_access_token(subject: str, token_version: int = 0) -> str:
         "ver": token_version,
         "iss": settings.jwt_issuer,
         "aud": settings.jwt_audience,
+        "admin_mfa": admin_mfa,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -68,4 +74,5 @@ def decode_access_token_claims(token: str) -> dict | None:
     return {
         "sub": str(subject),
         "ver": int(payload.get("ver", 0)),
+        "admin_mfa": bool(payload.get("admin_mfa", False)),
     }
