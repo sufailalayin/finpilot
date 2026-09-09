@@ -16,12 +16,22 @@ def client_ip(request: Request) -> str | None:
     if parsed.is_private or parsed.is_loopback:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            candidate = forwarded.split(",")[0].strip()
-            try:
-                ipaddress.ip_address(candidate)
-                return candidate[:64]
-            except ValueError:
-                pass
+            candidates = [
+                item.strip()
+                for item in forwarded.split(",")
+                if item.strip()
+            ]
+            for candidate in reversed(candidates):
+                try:
+                    forwarded_ip = ipaddress.ip_address(candidate)
+                except ValueError:
+                    continue
+                if not (
+                    forwarded_ip.is_private
+                    or forwarded_ip.is_loopback
+                    or forwarded_ip.is_link_local
+                ):
+                    return candidate[:64]
 
     return peer[:64]
 
