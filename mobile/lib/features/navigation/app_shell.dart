@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../ai/ai_screen.dart';
+import '../auth/auth_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../planning/planning_screen.dart';
 import '../profile/profile_screen.dart';
@@ -37,7 +38,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   void _handleSessionExpired() {
     if (!mounted || widget.api.sessionExpired.value != true) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    widget.api.sessionExpired.value = false;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => AuthScreen(api: widget.api)),
+      (_) => false,
+    );
   }
 
   @override
