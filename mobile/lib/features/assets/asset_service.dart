@@ -7,6 +7,7 @@ class AssetService {
 
   Future<Map<String, dynamic>> overview() async {
     final response = await _api.dio.get('/assets/overview/summary');
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -35,6 +36,7 @@ class AssetService {
         'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> updateAsset({
@@ -63,9 +65,11 @@ class AssetService {
         'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> deleteAsset(String assetId) async {
     await _api.dio.delete('/assets/$assetId');
+    _api.notifyDataChanged();
   }
 }
