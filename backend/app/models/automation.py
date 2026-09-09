@@ -40,6 +40,8 @@ class BillReminder(Base):
     provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     due_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    bill_generated_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     frequency: Mapped[str] = mapped_column(String(20), default="once")
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     reminder_days_before: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
