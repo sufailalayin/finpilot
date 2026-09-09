@@ -27,6 +27,8 @@ class AdminUserRow(BaseModel):
     email_verified: bool
     entitlement_status: str | None
     plan_code: str | None
+    billing_plan_id: str | None = None
+    billing_plan_name: str | None = None
     trial_ends_at: datetime | None
     paid_until: datetime | None
     created_at: datetime
@@ -63,6 +65,7 @@ class AdminSecurityEventRow(BaseModel):
 class AdminUserUpdate(BaseModel):
     user_status: str | None = None
     plan_code: str | None = None
+    billing_plan_id: str | None = None
     entitlement_status: str | None = None
     trial_ends_at: datetime | None = None
     paid_until: datetime | None = None
