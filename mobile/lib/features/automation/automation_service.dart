@@ -41,8 +41,71 @@ class AutomationService {
     _api.notifyDataChanged();
   }
 
+  Future<void> updateBill({
+    required String billId,
+    required String name,
+    required double amount,
+    required DateTime dueOn,
+    required String frequency,
+    required String billType,
+    String? provider,
+    required int reminderDaysBefore,
+    required bool autoRenew,
+  }) async {
+    await _api.dio.patch(
+      '/automation/bills/$billId',
+      data: {
+        'name': name.trim(),
+        'bill_type': billType,
+        'provider': provider?.trim().isEmpty == true ? null : provider?.trim(),
+        'amount': amount,
+        'due_on': dueOn.toIso8601String().split('T').first,
+        'frequency': frequency,
+        'reminder_days_before': reminderDaysBefore,
+        'auto_renew': autoRenew,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> deleteBill(String billId) async {
+    await _api.dio.delete('/automation/bills/$billId');
+    _api.notifyDataChanged();
+  }
+
   Future<void> markBillPaid(String billId) async {
     await _api.dio.post('/automation/bills/$billId/paid');
+    _api.notifyDataChanged();
+  }
+
+  Future<void> updateRecurring({
+    required String ruleId,
+    required String accountId,
+    required String name,
+    required String transactionType,
+    required double amount,
+    required String frequency,
+    required DateTime nextDueOn,
+    bool isActive = true,
+  }) async {
+    await _api.dio.patch(
+      '/automation/recurring/$ruleId',
+      data: {
+        'account_id': accountId,
+        'name': name.trim(),
+        'transaction_type': transactionType,
+        'amount': amount,
+        'frequency': frequency,
+        'day_of_month': frequency == 'monthly' ? nextDueOn.day : null,
+        'next_due_on': nextDueOn.toIso8601String().split('T').first,
+        'is_active': isActive,
+      },
+    );
+    _api.notifyDataChanged();
+  }
+
+  Future<void> deleteRecurring(String ruleId) async {
+    await _api.dio.delete('/automation/recurring/$ruleId');
     _api.notifyDataChanged();
   }
 
