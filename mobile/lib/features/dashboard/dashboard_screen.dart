@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/app_error_state.dart';
 import '../accounts/accounts_screen.dart';
 import '../auth/auth_screen.dart';
 import '../auth/auth_service.dart';
@@ -183,12 +184,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           if (snapshot.hasError || !snapshot.hasData) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry dashboard'),
-              ),
+            return AppErrorState(
+              error: snapshot.error,
+              onRetry: _refresh,
+              title: 'Dashboard unavailable',
             );
           }
 
