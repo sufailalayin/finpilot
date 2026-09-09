@@ -38,6 +38,7 @@ export const updateAdminUser = (
   payload: {
     user_status?: string;
     plan_code?: string;
+    billing_plan_id?: string;
     entitlement_status?: string;
     trial_ends_at?: string | null;
     paid_until?: string | null;
