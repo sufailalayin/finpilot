@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.production import validate_production_settings
 from app.routers.admin import router as admin_router
+from app.routers.app_release import router as app_release_router
 from app.routers.analytics import router as analytics_router
 from app.routers.automation import router as automation_router
 from app.routers.assets import router as assets_router
@@ -43,6 +44,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(planning_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(app_release_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(automation_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
