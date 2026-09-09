@@ -21,6 +21,8 @@ from app.schemas.automation import (
     BillCreate,
     BillResponse,
     BillUpdate,
+    CreditCardStatementCreate,
+    CreditCardPaymentCreate,
     RecurringRuleCreate,
     RecurringRuleResponse,
     RecurringRuleUpdate,
@@ -129,6 +131,111 @@ async def list_recurring(
         .order_by(RecurringRule.next_due_on.asc())
     )
     return [RecurringRuleResponse.model_validate(row) for row in result.scalars().all()]
+
+
+@router.post("/cards/statements", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
+async def create_credit_card_statement(
+    payload: CreditCardStatementCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BillResponse:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == payload.account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    if account is None or account.account_type.value != "card":
+        raise HTTPException(status_code=404, detail="Credit card account not found")
+    if payload.minimum_due is not None and payload.minimum_due > payload.amount:
+        raise HTTPException(status_code=400, detail="Minimum due cannot exceed total due")
+
+    bill = BillReminder(
+        user_id=user.id,
+        name=account.name + " statement",
+        bill_type="credit_card",
+        provider=account.name,
+        account_id=account.id,
+        amount=payload.amount,
+        minimum_due=payload.minimum_due,
+        paid_amount=Decimal("0.00"),
+        due_on=payload.due_on,
+        bill_generated_on=payload.generated_on,
+        card_last4=account.card_last4,
+        frequency="once",
+        reminder_days_before=payload.reminder_days_before,
+        auto_renew=False,
+    )
+    db.add(bill)
+    await db.commit()
+    await db.refresh(bill)
+    return BillResponse.model_validate(bill)
+
+
+@router.post("/cards/statements/{bill_id}/pay", response_model=BillResponse)
+async def pay_credit_card_statement(
+    bill_id: uuid.UUID,
+    payload: CreditCardPaymentCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BillResponse:
+    bill = await db.scalar(
+        select(BillReminder).where(
+            BillReminder.id == bill_id,
+            BillReminder.user_id == user.id,
+            BillReminder.bill_type == "credit_card",
+        )
+    )
+    if bill is None or bill.account_id is None:
+        raise HTTPException(status_code=404, detail="Credit card statement not found")
+
+    card = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == bill.account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    payment_account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == payload.payment_account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    if card is None or payment_account is None:
+        raise HTTPException(status_code=404, detail="Payment account not found")
+    if payment_account.id == card.id:
+        raise HTTPException(status_code=400, detail="Select a non-card payment account")
+
+    remaining = bill.amount - bill.paid_amount
+    if remaining <= 0:
+        raise HTTPException(status_code=409, detail="Statement is already paid")
+    if payload.amount > remaining:
+        raise HTTPException(status_code=400, detail="Payment exceeds remaining due")
+
+    outgoing = Transaction(
+        user_id=user.id,
+        account_id=payment_account.id,
+        transaction_type=TransactionType.EXPENSE,
+        amount=payload.amount,
+        occurred_on=payload.occurred_on,
+        merchant=card.name + " payment",
+        note=payload.note or "Credit card statement payment",
+    )
+    card_payment = Transaction(
+        user_id=user.id,
+        account_id=card.id,
+        transaction_type=TransactionType.INCOME,
+        amount=payload.amount,
+        occurred_on=payload.occurred_on,
+        merchant="Card payment",
+        note=payload.note or "Credit card statement payment",
+    )
+    db.add_all([outgoing, card_payment])
+    bill.paid_amount += payload.amount
+    bill.is_paid = bill.paid_amount >= bill.amount
+    await db.commit()
+    await db.refresh(bill)
+    return BillResponse.model_validate(bill)
 
 
 @router.post("/bills", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
