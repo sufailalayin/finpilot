@@ -41,6 +41,8 @@ class BillCreate(BaseModel):
     provider: str | None = Field(default=None, max_length=120)
     amount: Decimal = Field(gt=0)
     due_on: date
+    bill_generated_on: date | None = None
+    card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
     frequency: str = "once"
     reminder_days_before: int = Field(default=3, ge=0, le=30)
     auto_renew: bool = False
@@ -52,6 +54,8 @@ class BillUpdate(BaseModel):
     provider: str | None = Field(default=None, max_length=120)
     amount: Decimal | None = Field(default=None, gt=0)
     due_on: date | None = None
+    bill_generated_on: date | None = None
+    card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
     frequency: str | None = None
     reminder_days_before: int | None = Field(default=None, ge=0, le=30)
     auto_renew: bool | None = None
