@@ -4,7 +4,7 @@ Revision ID: 0013_merge_admin_auth_credit_card
 Revises: 0012_merge_admin_auth, 0012_credit_card_bills
 """
 
-revision = "0013_merge_admin_auth_credit_card"
+revision = "0013_merge_heads"
 down_revision = ("0012_merge_admin_auth", "0012_credit_card_bills")
 branch_labels = None
 depends_on = None
