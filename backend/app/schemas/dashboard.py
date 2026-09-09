@@ -17,6 +17,7 @@ class DashboardSummary(BaseModel):
 class AccountBalance(BaseModel):
     account_id: str
     account_name: str
+    account_type: str
     currency: str
     balance: Decimal
 
