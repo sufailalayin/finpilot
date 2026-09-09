@@ -90,6 +90,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             {
                 "account_id": str(account.id),
                 "account_name": account.name,
+                "account_type": account.account_type.value,
                 "currency": account.currency,
                 "balance": balance,
             }
