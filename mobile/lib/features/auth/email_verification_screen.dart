@@ -154,6 +154,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   const SizedBox(height: 28),
                   TextField(
                     controller: _code,
+                    autofillHints: const [AutofillHints.oneTimeCode],
                     autofocus: true,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
