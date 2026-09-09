@@ -7,6 +7,7 @@ class PlanningService {
 
   Future<Map<String, dynamic>> budgetDashboard() async {
     final response = await _api.dio.get('/planning/budgets/dashboard');
+    _api.notifyDataChanged();
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -42,6 +43,7 @@ class PlanningService {
         'target_date': targetDate?.toIso8601String().split('T').first,
       },
     );
+    _api.notifyDataChanged();
   }
 
   Future<void> createBudget({
@@ -65,5 +67,6 @@ class PlanningService {
         'alert_threshold_pct': alertThresholdPct,
       },
     );
+    _api.notifyDataChanged();
   }
 }
