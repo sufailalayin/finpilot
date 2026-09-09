@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
 from app.models.finance import FinanceAccount, Transaction, TransactionType
+from app.models.receivable import ReceivableMovement
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
 from app.schemas.liability import (
@@ -23,6 +24,67 @@ from app.schemas.liability import (
 )
 
 router = APIRouter(prefix="/liabilities", tags=["liabilities"])
+
+
+async def _cash_bank_balance(
+    db: AsyncSession,
+    user_id,
+    account: FinanceAccount,
+) -> Decimal:
+    tx_movement = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.transaction_type == TransactionType.INCOME, Transaction.amount),
+                        (Transaction.transaction_type == TransactionType.EXPENSE, -Transaction.amount),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            )
+        ).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account.id,
+        )
+    )
+    receivable_movement = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                        (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            )
+        ).where(ReceivableMovement.user_id == user_id)
+    )
+    loan_inflow = await db.scalar(
+        select(
+            func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+        ).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account.id,
+        )
+    )
+    loan_outflow = await db.scalar(
+        select(
+            func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+        ).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account.id,
+        )
+    )
+    return (
+        account.opening_balance
+        + (tx_movement or Decimal("0.00"))
+        + (receivable_movement or Decimal("0.00"))
+        + (loan_inflow or Decimal("0.00"))
+        - (loan_outflow or Decimal("0.00"))
+    )
 
 
 @router.post("", response_model=LiabilityResponse, status_code=status.HTTP_201_CREATED)
@@ -132,6 +194,12 @@ async def record_payment(
             raise HTTPException(status_code=404, detail="Payment account not found")
         if payment_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Loan payments can only come from Cash or Bank")
+        available = await _cash_bank_balance(db, user.id, payment_account)
+        if payload.amount > available:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected account does not have enough balance",
+            )
 
     payment = LiabilityPayment(
         liability_id=item.id,
