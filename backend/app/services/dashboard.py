@@ -193,8 +193,16 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
     insights = [
         {
             "title": "Health score",
-            "value": str(analytics["financial_health_score"]) + "/100",
-            "subtitle": analytics["health_grade"],
+            "value": (
+                str(analytics["financial_health_score"]) + "/100"
+                if analytics["health_score_available"]
+                else "Not enough data"
+            ),
+            "subtitle": (
+                analytics["health_grade"]
+                if analytics["health_score_available"]
+                else "Add income or expenses"
+            ),
             "severity": (
                 "good"
                 if analytics["financial_health_score"] >= 70
@@ -240,6 +248,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         "liabilities": liabilities,
         "savings_rate": analytics["savings_rate"],
         "financial_health_score": analytics["financial_health_score"],
+        "health_score_available": analytics["health_score_available"],
         "health_grade": analytics["health_grade"],
         "active_budget_count": len(active_budgets),
         "budget_warning_count": budget_warning_count,
