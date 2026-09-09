@@ -12,12 +12,20 @@ class AccountCreate(BaseModel):
     account_type: AccountType
     currency: str = Field(default="INR", min_length=3, max_length=3)
     opening_balance: Decimal = Decimal("0.00")
+    credit_limit: Decimal | None = Field(default=None, ge=0)
+    card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
+    statement_day: int | None = Field(default=None, ge=1, le=31)
+    payment_due_day: int | None = Field(default=None, ge=1, le=31)
 
 
 class AccountUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     account_type: AccountType | None = None
     opening_balance: Decimal | None = None
+    credit_limit: Decimal | None = Field(default=None, ge=0)
+    card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
+    statement_day: int | None = Field(default=None, ge=1, le=31)
+    payment_due_day: int | None = Field(default=None, ge=1, le=31)
 
 
 class AccountBalanceResponse(BaseModel):
@@ -27,6 +35,12 @@ class AccountBalanceResponse(BaseModel):
     currency: str
     opening_balance: Decimal
     current_balance: Decimal
+    credit_limit: Decimal | None = None
+    card_last4: str | None = None
+    statement_day: int | None = None
+    payment_due_day: int | None = None
+    available_credit: Decimal | None = None
+    utilization_pct: float | None = None
     created_at: datetime
 
 
