@@ -92,3 +92,11 @@ export const deleteAdminUser = (userId: string, reason: string) =>
     method: "POST",
     body: JSON.stringify({ reason, confirmation: "DELETE" }),
   });
+
+
+export const fetchAppRelease = () => apiGet("/admin/app-release");
+export const updateAppRelease = (payload: unknown) =>
+  apiRequest("/admin/app-release", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
