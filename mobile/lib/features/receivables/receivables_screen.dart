@@ -389,6 +389,238 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
     if (saved == true && mounted) await _refresh();
   }
 
+  Future<void> _moveMoney() async {
+    final data = await _service.overview();
+    final accounts = await _service.accounts();
+    if (!mounted) return;
+
+    final pending = ((data['pending'] as List<dynamic>?) ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    final cleared = ((data['cleared'] as List<dynamic>?) ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    final people = [...pending, ...cleared];
+
+    final amount = TextEditingController();
+    final note = TextEditingController();
+    String sourceType = 'person';
+    String destinationType = 'person';
+    String? sourceAccountId;
+    String? destinationAccountId;
+    String? sourcePersonId = pending.isNotEmpty ? pending.first['id'].toString() : null;
+    String? destinationPersonId =
+        people.length > 1 ? people[1]['id'].toString() : (people.isNotEmpty ? people.first['id'].toString() : null);
+    DateTime occurredOn = DateTime.now();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) {
+          Widget selectorFor(String type, bool source) {
+            if (type == 'account') {
+              final value = source ? sourceAccountId : destinationAccountId;
+              return DropdownButtonFormField<String>(
+                initialValue: value,
+                decoration: InputDecoration(
+                  labelText: source ? 'From account' : 'To account',
+                ),
+                items: accounts
+                    .where((row) => row['account_type']?.toString() != 'card')
+                    .map(
+                      (row) => DropdownMenuItem<String>(
+                        value: row['id'].toString(),
+                        child: Text(row['name'].toString()),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => setLocal(() {
+                  if (source) {
+                    sourceAccountId = value;
+                  } else {
+                    destinationAccountId = value;
+                  }
+                }),
+              );
+            }
+
+            if (type == 'person') {
+              final rows = source ? pending : people;
+              final value = source ? sourcePersonId : destinationPersonId;
+              return DropdownButtonFormField<String>(
+                initialValue: value,
+                decoration: InputDecoration(
+                  labelText: source ? 'From person' : 'To person',
+                ),
+                items: rows
+                    .map(
+                      (row) => DropdownMenuItem<String>(
+                        value: row['id'].toString(),
+                        child: Text(
+                          row['person_name'].toString() +
+                              (source
+                                  ? ' • ' +
+                                      _money.format(
+                                        double.tryParse(
+                                              row['remaining_amount'].toString(),
+                                            ) ??
+                                            0,
+                                      )
+                                  : ''),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => setLocal(() {
+                  if (source) {
+                    sourcePersonId = value;
+                  } else {
+                    destinationPersonId = value;
+                  }
+                }),
+              );
+            }
+
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Outside FinPilot — no tracked account balance changes.'),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Move money'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: sourceType,
+                    decoration: const InputDecoration(labelText: 'From'),
+                    items: const [
+                      DropdownMenuItem(value: 'account', child: Text('My cash / bank')),
+                      DropdownMenuItem(value: 'person', child: Text('Person')),
+                      DropdownMenuItem(value: 'outside', child: Text('Outside')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setLocal(() => sourceType = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  selectorFor(sourceType, true),
+                  const SizedBox(height: 16),
+                  const Icon(Icons.arrow_downward),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: destinationType,
+                    decoration: const InputDecoration(labelText: 'To'),
+                    items: const [
+                      DropdownMenuItem(value: 'account', child: Text('My cash / bank')),
+                      DropdownMenuItem(value: 'person', child: Text('Person')),
+                      DropdownMenuItem(value: 'outside', child: Text('Outside')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setLocal(() => destinationType = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  selectorFor(destinationType, false),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amount,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Amount',
+                      prefixText: '₹ ',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Date'),
+                    subtitle: Text(
+                      DateFormat('dd MMM yyyy').format(occurredOn),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                        initialDate: occurredOn,
+                      );
+                      if (picked != null) {
+                        setLocal(() => occurredOn = picked);
+                      }
+                    },
+                  ),
+                  TextField(
+                    controller: note,
+                    decoration: const InputDecoration(
+                      labelText: 'Note (optional)',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final value =
+                      double.tryParse(amount.text.trim().replaceAll(',', ''));
+                  if (value == null || value <= 0) return;
+                  if (sourceType != 'person' && destinationType != 'person') return;
+                  if (sourceType == 'person' && sourcePersonId == null) return;
+                  if (destinationType == 'person' && destinationPersonId == null) return;
+                  if (sourceType == 'account' && sourceAccountId == null) return;
+                  if (destinationType == 'account' && destinationAccountId == null) return;
+                  if (sourceType == 'person' &&
+                      destinationType == 'person' &&
+                      sourcePersonId == destinationPersonId) {
+                    return;
+                  }
+
+                  await _service.move(
+                    sourceType: sourceType,
+                    destinationType: destinationType,
+                    sourceAccountId:
+                        sourceType == 'account' ? sourceAccountId : null,
+                    destinationAccountId:
+                        destinationType == 'account' ? destinationAccountId : null,
+                    sourceReceivableId:
+                        sourceType == 'person' ? sourcePersonId : null,
+                    destinationReceivableId:
+                        destinationType == 'person' ? destinationPersonId : null,
+                    amount: value,
+                    occurredOn: occurredOn,
+                    note: note.text,
+                  );
+
+                  if (!context.mounted) return;
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('Move'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      amount.dispose();
+      note.dispose();
+    });
+
+    if (saved == true && mounted) await _refresh();
+  }
+
   Future<void> _showHistory(Map<String, dynamic> item) async {
     final detail = await _service.detail(item['id'].toString());
     if (!mounted) return;
@@ -558,6 +790,13 @@ class _ReceivablesScreenState extends State<ReceivablesScreen>
           'Money Given',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
+        actions: [
+          IconButton(
+            onPressed: _moveMoney,
+            tooltip: 'Move money',
+            icon: const Icon(Icons.swap_horiz),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
