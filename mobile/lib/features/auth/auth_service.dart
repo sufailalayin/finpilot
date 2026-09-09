@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../core/api_client.dart';
 
 class AuthService {
@@ -41,7 +43,21 @@ class AuthService {
 
   Future<bool> hasSession() async {
     final token = await _api.readToken();
-    return token != null && token.isNotEmpty;
+    if (token == null || token.isEmpty) return false;
+
+    try {
+      await _api.dio.get('/auth/me');
+      return true;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401) {
+        await _api.clearToken();
+        return false;
+      }
+
+      // If the backend/network is temporarily unavailable, keep the local
+      // session and allow normal screen-level retry handling to recover.
+      return true;
+    }
   }
 
   Future<void> logout() => _api.clearToken();
