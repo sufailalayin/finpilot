@@ -19,8 +19,15 @@ class SecurityPrivacyService {
   Future<void> revokeSessions() async {
     final response = await _api.dio.post('/security/revoke-sessions');
     final token = response.data['access_token']?.toString();
-    if (token != null && token.isNotEmpty) {
-      await _api.saveToken(token);
+    final refreshToken = response.data['refresh_token']?.toString();
+    if (token != null &&
+        token.isNotEmpty &&
+        refreshToken != null &&
+        refreshToken.isNotEmpty) {
+      await _api.saveSession(
+        accessToken: token,
+        refreshToken: refreshToken,
+      );
     }
   }
 
