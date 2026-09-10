@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../navigation/app_shell.dart';
+import '../security/security_setup_gate.dart';
 import 'auth_service.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
@@ -72,7 +73,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => AppShell(api: widget.api)),
+        MaterialPageRoute(
+          builder: (_) => SecuritySetupGate(
+            api: widget.api,
+            child: AppShell(api: widget.api),
+          ),
+        ),
         (_) => false,
       );
     } on DioException catch (error) {
