@@ -43,6 +43,12 @@ def validate_production_settings(settings: Settings) -> None:
     if settings.jwt_algorithm != "HS256":
         missing.append("FINPILOT_JWT_ALGORITHM must be HS256")
 
+    if (
+        settings.google_play_package_name
+        or settings.google_play_service_account_json
+    ) and not settings.google_play_rtdn_secret:
+        missing.append("FINPILOT_GOOGLE_PLAY_RTDN_SECRET")
+
     email_mode = settings.email_delivery_mode.lower()
     if email_mode == "resend":
         if not settings.resend_api_key or not settings.resend_from_email:
