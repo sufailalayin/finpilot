@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../navigation/app_shell.dart';
+import '../security/security_setup_gate.dart';
 import 'auth_service.dart';
 import 'email_verification_screen.dart';
 import 'forgot_password_screen.dart';
@@ -89,7 +90,10 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => AppShell(api: widget.api),
+          builder: (_) => SecuritySetupGate(
+            api: widget.api,
+            child: AppShell(api: widget.api),
+          ),
         ),
       );
     } on DioException catch (error) {
