@@ -1,12 +1,12 @@
 """Backfill refresh session token_version for databases that applied early 0022.
 
-Revision ID: 0023_refresh_session_token_version_compat
+Revision ID: 0023_refresh_token_ver
 Revises: 0022_refresh_sessions
 """
 
 from alembic import op
 
-revision = "0023_refresh_session_token_version_compat"
+revision = "0023_refresh_token_ver"
 down_revision = "0022_refresh_sessions"
 branch_labels = None
 depends_on = None
