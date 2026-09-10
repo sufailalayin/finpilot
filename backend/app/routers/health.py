@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.core.config import get_settings
+from app.dependencies.admin import get_current_admin
+from app.models.user import User
 
 router = APIRouter(tags=["health"])
 settings = get_settings()
@@ -21,8 +23,17 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="database unavailable",
+            detail="unavailable",
         ) from exc
+    return {"status": "ready"}
+
+
+@router.get("/admin/readiness")
+async def admin_readiness(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    await db.execute(text("SELECT 1"))
 
     email_mode = settings.email_delivery_mode.lower()
     email_ready = (
@@ -37,18 +48,17 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
             and bool(settings.resend_from_email)
         )
     )
-
     google_play_ready = all(
         (
             settings.google_play_package_name,
-            settings.google_play_monthly_product_id,
-            settings.google_play_yearly_product_id,
             settings.google_play_service_account_json,
+            settings.google_play_rtdn_secret,
         )
     )
     ai_ready = bool(settings.openai_api_key)
     cors_ready = bool(
         settings.cors_origins
+        and "*" not in settings.cors_origins
         and "localhost" not in settings.cors_origins.lower()
     )
     production_ready = all(
