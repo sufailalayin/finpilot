@@ -1,12 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND_BASE_URL =
-  process.env.FINPILOT_API_BASE_URL ??
-  "http://127.0.0.1:8000/api/v1";
+import {
+  backendBaseUrl,
+  readSmallBody,
+  rejectCrossSite,
+  tooLargeResponse,
+} from "../../../../lib/server-security";
 
 export async function POST(request: NextRequest) {
-  const body = await request.text();
-  const base = BACKEND_BASE_URL.replace(/\/$/, "");
+  const rejected = rejectCrossSite(request);
+  if (rejected) return rejected;
+
+  let body: string;
+  try {
+    body = await readSmallBody(request);
+  } catch {
+    return tooLargeResponse();
+  }
+
+  let base: string;
+  try {
+    base = backendBaseUrl();
+  } catch {
+    return NextResponse.json(
+      { detail: "Admin backend is not configured." },
+      { status: 503 },
+    );
+  }
 
   const response = await fetch(base + "/auth/login", {
     method: "POST",
