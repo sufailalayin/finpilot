@@ -18,6 +18,7 @@ from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable, ReceivableMovement, ReceivableRepayment
 from app.models.user import SecurityAuditEvent, User
+from app.services.refresh_sessions import revoke_all_refresh_sessions
 from app.schemas.security_privacy import (
     AccountDeleteRequest,
     DataExportResponse,
@@ -93,6 +94,7 @@ async def revoke_sessions(
     db: AsyncSession = Depends(get_db),
 ) -> RevokeSessionsResponse:
     user.token_version += 1
+    await revoke_all_refresh_sessions(db, user_id=user.id)
     db.add(
         SecurityAuditEvent(
             user_id=user.id,
