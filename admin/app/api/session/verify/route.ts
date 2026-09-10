@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND_BASE_URL =
-  process.env.FINPILOT_API_BASE_URL ??
-  "http://127.0.0.1:8000/api/v1";
+import {
+  backendBaseUrl,
+  readSmallBody,
+  rejectCrossSite,
+  tooLargeResponse,
+} from "../../../../lib/server-security";
 
 export async function POST(request: NextRequest) {
+  const rejected = rejectCrossSite(request);
+  if (rejected) return rejected;
+
   const pending = request.cookies.get("finpilot_admin_mfa_pending")?.value;
   if (!pending) {
     return NextResponse.json(
@@ -13,9 +18,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.text();
+  let body: string;
+  try {
+    body = await readSmallBody(request);
+  } catch {
+    return tooLargeResponse();
+  }
+
+  let base: string;
+  try {
+    base = backendBaseUrl();
+  } catch {
+    return NextResponse.json(
+      { detail: "Admin backend is not configured." },
+      { status: 503 },
+    );
+  }
+
   const response = await fetch(
-    BACKEND_BASE_URL.replace(/\/$/, "") + "/auth/admin/mfa/verify",
+    base + "/auth/admin/mfa/verify",
     {
       method: "POST",
       headers: {
