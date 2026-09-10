@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AdminOverview(BaseModel):
@@ -172,6 +172,19 @@ class AppReleaseUpdate(BaseModel):
     release_notes: str | None = Field(default=None, max_length=5000)
     distribution: str = Field(default="apk", pattern=r"^(apk|play_store)$")
     is_update_enabled: bool = True
+
+
+    @field_validator("update_url")
+    @classmethod
+    def validate_update_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        if not candidate:
+            return None
+        if not candidate.startswith("https://"):
+            raise ValueError("Update URL must use HTTPS")
+        return candidate
 
 
 class AppReleaseResponse(AppReleaseUpdate):
