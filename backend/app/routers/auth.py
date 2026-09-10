@@ -39,6 +39,9 @@ from app.services.trials import create_trial_entitlement, normalize_entitlement
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+DUMMY_PASSWORD_HASH = hash_password(
+    "finpilot-dummy-password-for-timing-equalization"
+)
 
 
 def _otp_response(email: str, message: str) -> OtpRequestResponse:
@@ -261,10 +264,13 @@ async def login(
             headers={"Retry-After": str(retry_after)},
         )
 
-    password_ok = (
-        user is not None
-        and verify_password(payload.password, user.password_hash)
+    hash_to_check = (
+        user.password_hash
+        if user is not None
+        else DUMMY_PASSWORD_HASH
     )
+    verified = verify_password(payload.password, hash_to_check)
+    password_ok = user is not None and verified
 
     if not password_ok:
         if user is not None:
