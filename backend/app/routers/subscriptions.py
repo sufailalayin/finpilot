@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import json
 from datetime import datetime, timezone
 
@@ -210,9 +211,17 @@ async def google_play_rtdn(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     expected = settings.google_play_rtdn_secret
-    if expected:
-        if authorization != "Bearer " + expected:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid RTDN secret")
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RTDN authentication is not configured",
+        )
+    supplied = authorization or ""
+    if not hmac.compare_digest(supplied, "Bearer " + expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid RTDN authentication",
+        )
 
     message = payload.get("message") or {}
     encoded = message.get("data")
