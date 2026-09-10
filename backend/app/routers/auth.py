@@ -14,8 +14,10 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     GenericAuthMessage,
     LoginRequest,
+    LogoutRequest,
     OtpRequestResponse,
     OtpVerifyRequest,
+    RefreshTokenRequest,
     RegisterRequest,
     ResendOtpRequest,
     ResetPasswordRequest,
@@ -34,6 +36,12 @@ from app.services.login_security import (
     clear_login_failures,
     lock_seconds_remaining,
     record_login_failure,
+)
+from app.services.refresh_sessions import (
+    issue_refresh_session,
+    revoke_all_refresh_sessions,
+    revoke_refresh_token,
+    rotate_refresh_session,
 )
 from app.services.trials import create_trial_entitlement, normalize_entitlement
 
@@ -232,11 +240,15 @@ async def verify_register_otp(
     )
     user = result.scalar_one()
 
+    _, refresh_token = await issue_refresh_session(db, user=user)
+    await db.commit()
+
     return TokenResponse(
         access_token=create_access_token(
             str(user.id),
             user.token_version,
         ),
+        refresh_token=refresh_token,
         user=UserResponse.model_validate(user),
     )
 
@@ -330,11 +342,15 @@ async def login(
     )
     await db.commit()
 
+    _, refresh_token = await issue_refresh_session(db, user=user)
+    await db.commit()
+
     return TokenResponse(
         access_token=create_access_token(
             str(user.id),
             user.token_version,
         ),
+        refresh_token=refresh_token,
         user=UserResponse.model_validate(user),
     )
 
@@ -414,6 +430,7 @@ async def reset_password(
 
     user.password_hash = hash_password(payload.new_password)
     user.token_version += 1
+    await revoke_all_refresh_sessions(db, user_id=user.id)
 
     db.add(
         SecurityAuditEvent(
@@ -433,6 +450,48 @@ async def reset_password(
     )
 
 
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_session(
+    payload: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    rotated = await rotate_refresh_session(
+        db,
+        token=payload.refresh_token,
+    )
+    if rotated is None:
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please sign in again.",
+        )
+
+    user, new_refresh_token = rotated
+    await db.commit()
+    return TokenResponse(
+        access_token=create_access_token(
+            str(user.id),
+            user.token_version,
+        ),
+        refresh_token=new_refresh_token,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/logout", response_model=GenericAuthMessage)
+async def logout(
+    payload: LogoutRequest,
+    db: AsyncSession = Depends(get_db),
+) -> GenericAuthMessage:
+    if payload.refresh_token:
+        await revoke_refresh_token(
+            db,
+            token=payload.refresh_token,
+        )
+        await db.commit()
+    return GenericAuthMessage(message="Signed out successfully.")
 
 
 @router.post("/admin/mfa/request", response_model=OtpRequestResponse)
