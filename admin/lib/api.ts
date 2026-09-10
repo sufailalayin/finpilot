@@ -64,7 +64,7 @@ export const sendAdminTestEmail = () =>
   apiRequest("/admin/email/test", { method: "POST" });
 
 
-export const fetchSystemReadiness = () => apiGet("/ready");
+export const fetchSystemReadiness = () => apiGet("/admin/readiness");
 
 export const fetchBillingPlans = () => apiGet("/admin/plans");
 export const createBillingPlan = (payload: unknown) =>
