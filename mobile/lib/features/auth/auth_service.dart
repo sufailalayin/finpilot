@@ -35,7 +35,11 @@ class AuthService {
       },
     );
     final token = response.data['access_token'] as String;
-    await _api.saveToken(token);
+    final refreshToken = response.data['refresh_token'] as String;
+    await _api.saveSession(
+      accessToken: token,
+      refreshToken: refreshToken,
+    );
   }
 
   Future<Map<String, dynamic>> resendRegistrationOtp({
@@ -87,12 +91,20 @@ class AuthService {
     );
 
     final token = response.data['access_token'] as String;
-    await _api.saveToken(token);
+    final refreshToken = response.data['refresh_token'] as String;
+    await _api.saveSession(
+      accessToken: token,
+      refreshToken: refreshToken,
+    );
   }
 
   Future<bool> hasSession() async {
     final token = await _api.readToken();
-    if (token == null || token.isEmpty) return false;
+    final refresh = await _api.readRefreshToken();
+    if ((token == null || token.isEmpty) &&
+        (refresh == null || refresh.isEmpty)) {
+      return false;
+    }
 
     try {
       await _api.dio.get('/auth/me');
@@ -109,5 +121,18 @@ class AuthService {
     }
   }
 
-  Future<void> logout() => _api.clearToken();
+  Future<void> logout() async {
+    final refresh = await _api.readRefreshToken();
+    if (refresh != null && refresh.isNotEmpty) {
+      try {
+        await _api.dio.post(
+          '/auth/logout',
+          data: {'refresh_token': refresh},
+        );
+      } catch (_) {
+        // Local sign-out must still succeed if the network is unavailable.
+      }
+    }
+    await _api.clearSession();
+  }
 }
