@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class RevokeSessionsResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 
