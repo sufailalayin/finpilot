@@ -40,3 +40,16 @@ Release date: 10 September 2026
 
 - Version name: 1.1.0
 - Build number: 2
+
+
+## Persistent session & device protection
+
+- Rotating 90-day refresh sessions keep the mobile app signed in without making access JWTs long-lived.
+- Refresh tokens are stored only in Android secure storage and only token hashes are stored server-side.
+- Refresh-token rotation prevents reuse of an already-consumed token.
+- Password reset and session revocation invalidate persistent sessions.
+- First successful sign-in asks the user to configure a 4–8 digit FinPilot app PIN and optional fingerprint/biometric unlock.
+- App PINs use a random salt, iterative hashing, secure storage, legacy PIN migration, and failed-attempt lockout.
+- Public readiness output is minimal; detailed readiness is administrator-only.
+- Google Play RTDN authentication is fail-closed and constant-time validated.
+- App update URLs must use HTTPS.
