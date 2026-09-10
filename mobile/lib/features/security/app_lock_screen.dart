@@ -67,6 +67,16 @@ class _AppLockScreenState extends State<AppLockScreen> {
   Future<void> _unlockWithPin() async {
     if (_unlockingPin) return;
 
+    final lockedFor = await _security.pinLockSecondsRemaining();
+    if (!mounted) return;
+    if (lockedFor > 0) {
+      setState(
+        () => _error =
+            'Too many incorrect PIN attempts. Try again in ${lockedFor}s.',
+      );
+      return;
+    }
+
     final value = _pin.text.trim();
     if (value.length < 4) {
       setState(() => _error = 'Enter your app PIN.');
@@ -86,9 +96,13 @@ class _AppLockScreenState extends State<AppLockScreen> {
       return;
     }
 
+    final afterFailureLock = await _security.pinLockSecondsRemaining();
+    if (!mounted) return;
     setState(() {
       _unlockingPin = false;
-      _error = 'Incorrect PIN.';
+      _error = afterFailureLock > 0
+          ? 'Too many incorrect PIN attempts. Try again in ${afterFailureLock}s.'
+          : 'Incorrect PIN.';
     });
   }
 
