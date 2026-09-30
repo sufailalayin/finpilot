@@ -1,6 +1,6 @@
 # FinPilot 1.1.3
 
-Build 5
+Build 6
 
 ## Fixes
 
@@ -13,3 +13,8 @@ Build 5
 - Excluded internal account transfers from monthly income/expense, savings-rate, and financial-health calculations.
 - Financial health now waits for recorded income instead of producing a misleading score from expense-only data.
 - Added regression tests for admin-plan handling and finance calculation accuracy.
+
+
+## Release pipeline
+
+- Re-triggered the signed Android release after restoring repository-level signing secrets and API configuration.
