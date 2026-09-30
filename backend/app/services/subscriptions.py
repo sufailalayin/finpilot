@@ -1,6 +1,19 @@
 from datetime import datetime, timezone
 
-from app.models.user import Entitlement, EntitlementStatus, PlanCode
+from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
+
+
+def ensure_user_entitlement(user: User) -> Entitlement:
+    """Create a conservative entitlement for legacy users that are missing one."""
+    if user.entitlement is not None:
+        return user.entitlement
+
+    entitlement = Entitlement(
+        plan_code=PlanCode.PRO if user.is_admin else PlanCode.FREE,
+        status=EntitlementStatus.ACTIVE if user.is_admin else EntitlementStatus.EXPIRED,
+    )
+    user.entitlement = entitlement
+    return entitlement
 
 
 def apply_paid_entitlement(
