@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from app.models.user import Entitlement, EntitlementStatus, PlanCode
-from app.services.subscriptions import apply_manual_plan_change, apply_paid_entitlement, normalize_paid_entitlement
+from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
+from app.services.subscriptions import apply_manual_plan_change, apply_paid_entitlement, ensure_user_entitlement, normalize_paid_entitlement
 
 def test_paid_entitlement_activation():
     now = datetime.now(timezone.utc)
@@ -92,3 +92,51 @@ def test_manual_non_trial_status_never_keeps_trial_end():
     assert entitlement.status == EntitlementStatus.EXPIRED
     assert entitlement.plan_code == PlanCode.FREE
     assert entitlement.trial_ends_at is None
+
+
+
+def test_missing_admin_entitlement_is_repaired_as_active_pro():
+    user = User(
+        email="admin@example.com",
+        password_hash="hash",
+        is_admin=True,
+    )
+
+    entitlement = ensure_user_entitlement(user)
+
+    assert user.entitlement is entitlement
+    assert entitlement.plan_code == PlanCode.PRO
+    assert entitlement.status == EntitlementStatus.ACTIVE
+
+
+def test_missing_regular_entitlement_is_repaired_as_expired_free():
+    user = User(
+        email="user@example.com",
+        password_hash="hash",
+        is_admin=False,
+    )
+
+    entitlement = ensure_user_entitlement(user)
+
+    assert user.entitlement is entitlement
+    assert entitlement.plan_code == PlanCode.FREE
+    assert entitlement.status == EntitlementStatus.EXPIRED
+
+
+def test_existing_entitlement_is_not_replaced():
+    existing = Entitlement(
+        plan_code=PlanCode.PRO,
+        status=EntitlementStatus.TRIAL,
+    )
+    user = User(
+        email="trial@example.com",
+        password_hash="hash",
+        is_admin=False,
+        entitlement=existing,
+    )
+
+    entitlement = ensure_user_entitlement(user)
+
+    assert entitlement is existing
+    assert user.entitlement is existing
+    assert entitlement.status == EntitlementStatus.TRIAL
