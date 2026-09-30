@@ -28,6 +28,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +55,7 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Validate repository signing configuration
+      - name: Validate production signing configuration
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -62,11 +63,11 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
         run: |
-          test -n "$KEYSTORE_B64" || (echo "Missing repository secret ANDROID_KEYSTORE_BASE64" && exit 1)
-          test -n "$STORE_PASSWORD" || (echo "Missing repository secret ANDROID_KEYSTORE_PASSWORD" && exit 1)
-          test -n "$KEY_ALIAS" || (echo "Missing repository secret ANDROID_KEY_ALIAS" && exit 1)
-          test -n "$KEY_PASSWORD" || (echo "Missing repository secret ANDROID_KEY_PASSWORD" && exit 1)
-          test -n "$API_BASE_URL" || (echo "Missing repository variable FINPILOT_API_BASE_URL" && exit 1)
+          test -n "$KEYSTORE_B64" || (echo "Missing production environment secret ANDROID_KEYSTORE_BASE64" && exit 1)
+          test -n "$STORE_PASSWORD" || (echo "Missing production environment secret ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing production environment secret ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing production environment secret ANDROID_KEY_PASSWORD" && exit 1)
+          test -n "$API_BASE_URL" || (echo "Missing production environment variable FINPILOT_API_BASE_URL" && exit 1)
 
       - uses: subosito/flutter-action@v2
         with:
