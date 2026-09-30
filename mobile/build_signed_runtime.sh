@@ -122,6 +122,16 @@ text = text.replace(
 path.write_text(text)
 PY
 
+cat >> "$APP_DIR/android/gradle.properties" <<'EOF'
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
+org.gradle.daemon=false
+org.gradle.parallel=false
+org.gradle.workers.max=2
+kotlin.daemon.jvmargs=-Xmx1024m
+EOF
+
+export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2"
+
 cd "$APP_DIR"
 flutter pub get
 flutter analyze --no-fatal-infos
