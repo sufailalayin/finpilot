@@ -31,6 +31,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   String? _entitlementFingerprint;
   bool _syncingEntitlement = false;
   String? _entitlementStatus;
+  String? _entitlementError;
 
   @override
   void initState() {
@@ -64,6 +65,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         _entitlementStatus = nextStatus;
+        _entitlementError = null;
       });
 
       if (_entitlementFingerprint == null) {
@@ -73,7 +75,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         widget.api.notifyDataChanged();
       }
     } catch (_) {
-      // Normal network retry/session handling is managed by ApiClient.
+      if (mounted && _entitlementStatus == null) {
+        setState(() {
+          _entitlementError =
+              'Unable to load your FinPilot access. Please check your connection and retry.';
+        });
+      }
     } finally {
       _syncingEntitlement = false;
     }
@@ -122,6 +129,50 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_entitlementStatus == null) {
+      if (_entitlementError != null) {
+        return Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off_outlined, size: 52),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'FinPilot could not finish loading',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _entitlementError!,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () {
+                          setState(() => _entitlementError = null);
+                          _syncEntitlement();
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
