@@ -10,13 +10,35 @@ export function backendBaseUrl(): string {
   return "http://127.0.0.1:8000/api/v1";
 }
 
+function expectedAdminOrigin(request: NextRequest): string {
+  const configured = process.env.FINPILOT_ADMIN_ORIGIN?.trim();
+  if (configured) {
+    return new URL(configured).origin;
+  }
+  return request.nextUrl.origin;
+}
+
 export function rejectCrossSite(request: NextRequest): NextResponse | null {
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) {
-    return NextResponse.json(
-      { detail: "Cross-origin admin request rejected." },
-      { status: 403 },
-    );
+  if (origin) {
+    let normalizedOrigin: string;
+    let expectedOrigin: string;
+    try {
+      normalizedOrigin = new URL(origin).origin;
+      expectedOrigin = expectedAdminOrigin(request);
+    } catch {
+      return NextResponse.json(
+        { detail: "Invalid admin request origin." },
+        { status: 403 },
+      );
+    }
+
+    if (normalizedOrigin !== expectedOrigin) {
+      return NextResponse.json(
+        { detail: "Cross-origin admin request rejected." },
+        { status: 403 },
+      );
+    }
   }
 
   const fetchSite = request.headers.get("sec-fetch-site");
