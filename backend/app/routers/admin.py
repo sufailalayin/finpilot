@@ -54,6 +54,7 @@ def _state(user: User, entitlement: Entitlement | None) -> dict:
     return {
         "user_status": user.status.value,
         "plan_code": entitlement.plan_code.value if entitlement else None,
+        "billing_plan_id": str(entitlement.billing_plan_id) if entitlement and entitlement.billing_plan_id else None,
         "entitlement_status": entitlement.status.value if entitlement else None,
         "trial_ends_at": entitlement.trial_ends_at.isoformat() if entitlement and entitlement.trial_ends_at else None,
         "paid_until": entitlement.paid_until.isoformat() if entitlement and entitlement.paid_until else None,
@@ -331,32 +332,36 @@ async def update_user(
                 raise HTTPException(status_code=400, detail="Invalid entitlement status") from exc
 
         selected_billing_plan = None
-        if payload.billing_plan_id is not None:
-            try:
-                billing_plan_uuid = uuid.UUID(payload.billing_plan_id)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="Invalid billing plan id") from exc
+        billing_plan_field_requested = "billing_plan_id" in payload.model_fields_set
+        if billing_plan_field_requested:
+            if payload.billing_plan_id:
+                try:
+                    billing_plan_uuid = uuid.UUID(payload.billing_plan_id)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="Invalid billing plan id") from exc
 
-            selected_billing_plan = await db.scalar(
-                select(BillingPlan).where(
-                    BillingPlan.id == billing_plan_uuid,
-                    BillingPlan.is_active.is_(True),
+                selected_billing_plan = await db.scalar(
+                    select(BillingPlan).where(
+                        BillingPlan.id == billing_plan_uuid,
+                        BillingPlan.is_active.is_(True),
+                    )
                 )
-            )
-            if selected_billing_plan is None:
-                raise HTTPException(status_code=404, detail="Billing plan not found")
+                if selected_billing_plan is None:
+                    raise HTTPException(status_code=404, detail="Billing plan not found")
 
-            entitlement.billing_plan_id = selected_billing_plan.id
-            requested_plan = (
-                PlanCode.PRO
-                if selected_billing_plan.access_level == "pro"
-                else PlanCode.FREE
-            )
+                entitlement.billing_plan_id = selected_billing_plan.id
+                requested_plan = (
+                    PlanCode.PRO
+                    if selected_billing_plan.access_level == "pro"
+                    else PlanCode.FREE
+                )
+            else:
+                entitlement.billing_plan_id = None
 
         if (
             payload.plan_code is not None
             or payload.entitlement_status is not None
-            or selected_billing_plan is not None
+            or billing_plan_field_requested
         ):
             apply_manual_plan_change(
                 entitlement,
@@ -386,9 +391,14 @@ async def update_user(
             elif selected_billing_plan.billing_period == "lifetime":
                 entitlement.paid_until = None
 
+    current_billing_plan = selected_billing_plan if entitlement is not None else None
     if entitlement is not None:
         normalize_entitlement(entitlement)
         normalize_paid_entitlement(entitlement)
+        if entitlement.billing_plan_id and current_billing_plan is None:
+            current_billing_plan = await db.scalar(
+                select(BillingPlan).where(BillingPlan.id == entitlement.billing_plan_id)
+            )
 
     after = _state(user, entitlement)
     if before == after:
@@ -427,7 +437,7 @@ async def update_user(
         entitlement_status=entitlement.status.value if entitlement else None,
         plan_code=entitlement.plan_code.value if entitlement else None,
         billing_plan_id=str(entitlement.billing_plan_id) if entitlement and entitlement.billing_plan_id else None,
-        billing_plan_name=selected_billing_plan.name if entitlement and selected_billing_plan else None,
+        billing_plan_name=current_billing_plan.name if entitlement and current_billing_plan else None,
         trial_ends_at=entitlement.trial_ends_at if entitlement else None,
         paid_until=entitlement.paid_until if entitlement else None,
         created_at=user.created_at,
