@@ -2,13 +2,14 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import ReceivableMovement
 
 
 async def build_analytics(db: AsyncSession, user_id) -> dict:
@@ -49,6 +50,10 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 Transaction.user_id == user_id,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
+                or_(
+                    Transaction.merchant.is_(None),
+                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+                ),
             )
         )
     ).one()
@@ -62,7 +67,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     # cash-flow activity. Without income/expense data, default component
     # points (for no debt, no budget overruns, etc.) can look like a real
     # score even though there is nothing to assess.
-    health_score_available = income > 0 or expenses > 0
+    health_score_available = income > 0
 
     category_rows = (
         await db.execute(
@@ -76,6 +81,10 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
+                or_(
+                    Transaction.merchant.is_(None),
+                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+                ),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())
@@ -114,6 +123,10 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= budget.period_end,
+            or_(
+                Transaction.merchant.is_(None),
+                Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+            ),
         ]
         if budget.category_id is not None:
             conditions.append(Transaction.category_id == budget.category_id)
@@ -152,6 +165,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
         ).scalars().all()
     )
     liquid_assets = Decimal("0.00")
+    card_liabilities = Decimal("0.00")
     for account in account_rows:
         movement = await db.scalar(
             select(
@@ -170,7 +184,47 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 Transaction.account_id == account.id,
             )
         )
-        liquid_assets += account.opening_balance + (movement or Decimal("0.00"))
+        movement = movement or Decimal("0.00")
+
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user_id)
+        )
+        liability_inflow = await db.scalar(
+            select(func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))).where(
+                Liability.user_id == user_id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))).where(
+                LiabilityPayment.user_id == user_id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        movement += (
+            (receivable_movement or Decimal("0.00"))
+            + (liability_inflow or Decimal("0.00"))
+            - (liability_outflow or Decimal("0.00"))
+        )
+
+        if account.account_type.value == "card":
+            card_liabilities += max(
+                account.opening_balance - movement,
+                Decimal("0.00"),
+            )
+        else:
+            liquid_assets += account.opening_balance + movement
 
     liabilities_total = await db.scalar(
         select(
@@ -180,7 +234,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             )
         ).where(Liability.user_id == user_id)
     )
-    liabilities_total = liabilities_total or Decimal("0.00")
+    liabilities_total = (liabilities_total or Decimal("0.00")) + card_liabilities
 
     monthly_emi = await db.scalar(
         select(
@@ -502,6 +556,10 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     Transaction.user_id == user_id,
                     Transaction.occurred_on >= start,
                     Transaction.occurred_on <= end,
+                    or_(
+                        Transaction.merchant.is_(None),
+                        Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+                    ),
                 )
             )
         ).one()
@@ -533,7 +591,14 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     Transaction.occurred_on <= end,
                 )
             )
-            net_worth += account.opening_balance + (movement or Decimal("0.00"))
+            movement = movement or Decimal("0.00")
+            if account.account_type.value == "card":
+                net_worth -= max(
+                    account.opening_balance - movement,
+                    Decimal("0.00"),
+                )
+            else:
+                net_worth += account.opening_balance + movement
 
         debt = await db.scalar(
             select(
@@ -596,6 +661,10 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= current_start,
                 Transaction.occurred_on <= current_end,
+                or_(
+                    Transaction.merchant.is_(None),
+                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+                ),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())
