@@ -774,7 +774,15 @@ function ManageUserModal({ user, plans, onClose, onSaved }: { user: UserRow; pla
           <h3>Access & plan</h3>
           <div className="control-grid">
             <label className="field"><span>Account status</span><select value={userStatus} onChange={(e) => setUserStatus(e.target.value)}><option value="active">Active</option><option value="suspended">Suspended</option></select></label>
-            <label className="field"><span>Custom plan</span><select value={billingPlanId} onChange={(e) => setBillingPlanId(e.target.value)}><option value="">No custom plan</option>{plans.filter((p) => p.is_active).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {money(plan.price, plan.currency)}</option>)}</select></label>
+            <label className="field"><span>Custom plan</span><select value={billingPlanId} onChange={(e) => {
+              const nextPlanId = e.target.value;
+              setBillingPlanId(nextPlanId);
+              const selected = plans.find((plan) => plan.id === nextPlanId);
+              if (selected) {
+                setPlanCode(selected.access_level);
+                setEntitlementStatus(selected.access_level === "pro" ? "active" : "expired");
+              }
+            }}><option value="">No custom plan</option>{plans.filter((p) => p.is_active).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {money(plan.price, plan.currency)}</option>)}</select></label>
             <label className="field"><span>Access level</span><select value={planCode} onChange={(e) => setPlanCode(e.target.value)}><option value="free">Free</option><option value="pro">Pro</option></select></label>
             <label className="field"><span>Plan status</span><select value={entitlementStatus} onChange={(e) => setEntitlementStatus(e.target.value)}><option value="trial">Trial</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select></label>
             <label className="field"><span>Trial ends</span><input type="date" value={trialEndsAt} onChange={(e) => setTrialEndsAt(e.target.value)} /></label>
