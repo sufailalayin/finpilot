@@ -1,0 +1,6 @@
+FROM ghcr.io/cirruslabs/flutter:stable
+USER root
+WORKDIR /src
+COPY . .
+RUN chmod +x /src/build_signed_runtime.sh
+CMD ["/src/build_signed_runtime.sh"]
