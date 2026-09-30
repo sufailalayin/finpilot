@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import uuid4
 
-from app.models.user import Entitlement, EntitlementStatus, PlanCode, User
+from app.models.user import Entitlement, EntitlementStatus, PlanCode, User, UserStatus
 from app.routers.admin import _state
 from app.schemas.admin import AdminBillingPlanCreate, AdminUserUpdate
 
@@ -28,6 +28,7 @@ def test_admin_state_tracks_billing_plan_changes():
         email="admin-plan-test@example.com",
         password_hash="not-used",
         full_name="Plan Test",
+        status=UserStatus.ACTIVE,
     )
     entitlement = Entitlement(
         plan_code=PlanCode.PRO,
