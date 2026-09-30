@@ -92,6 +92,7 @@ class AdminBillingPlanCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     access_level: str = Field(default="pro", pattern=r"^(free|pro)$")
     billing_period: str = Field(default="monthly", pattern=r"^(monthly|quarterly|yearly|lifetime|custom)$")
+    google_play_product_id: str | None = Field(default=None, max_length=160)
     price: Decimal = Field(ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     description: str | None = Field(default=None, max_length=1000)
