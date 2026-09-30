@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
+from app.models.user import User, UserStatus
 
 
 async def create_admin(email: str, password: str, full_name: str | None) -> None:
@@ -20,6 +20,8 @@ async def create_admin(email: str, password: str, full_name: str | None) -> None
                 full_name=full_name.strip() if full_name else None,
                 password_hash=hash_password(password),
                 is_admin=True,
+                email_verified=True,
+                status=UserStatus.ACTIVE,
             )
             db.add(user)
             await db.commit()
@@ -27,10 +29,15 @@ async def create_admin(email: str, password: str, full_name: str | None) -> None
             return
 
         existing.is_admin = True
+        existing.email_verified = True
+        existing.status = UserStatus.ACTIVE
+        existing.failed_login_attempts = 0
+        existing.login_locked_until = None
         if full_name:
             existing.full_name = full_name.strip()
         if password:
             existing.password_hash = hash_password(password)
+            existing.token_version += 1
         await db.commit()
         print("ADMIN UPDATED:", normalized_email)
 
