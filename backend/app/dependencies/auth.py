@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.security import decode_access_token_claims
 from app.db.session import get_db
 from app.models.user import EntitlementStatus, User, UserStatus
-from app.services.subscriptions import normalize_paid_entitlement
+from app.services.subscriptions import ensure_user_entitlement, normalize_paid_entitlement
 from app.services.trials import normalize_entitlement
 
 bearer = HTTPBearer(auto_error=False)
@@ -56,6 +56,10 @@ async def get_current_user(
     )
 
     entitlement = user.entitlement
+    if entitlement is None:
+        entitlement = ensure_user_entitlement(user)
+        await db.commit()
+
     if entitlement is not None:
         previous_status = entitlement.status
         previous_plan = entitlement.plan_code
@@ -79,10 +83,4 @@ async def get_current_user(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail="FinPilot trial or subscription has ended",
             )
-    elif not user.is_admin and not access_exempt:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="FinPilot access entitlement is unavailable",
-        )
-
     return user
