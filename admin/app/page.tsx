@@ -712,7 +712,7 @@ function ManageUserModal({ user, plans, onClose, onSaved }: { user: UserRow; pla
       await updateAdminUser(user.id, {
         user_status: userStatus,
         plan_code: planCode,
-        ...(billingPlanId ? { billing_plan_id: billingPlanId } : {}),
+        billing_plan_id: billingPlanId || null,
         entitlement_status: entitlementStatus,
         trial_ends_at: trialEndsAt ? new Date(trialEndsAt + "T23:59:59Z").toISOString() : null,
         paid_until: paidUntil ? new Date(paidUntil + "T23:59:59Z").toISOString() : null,
@@ -840,7 +840,7 @@ function CreatePlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     <div className="control-grid">
       <label className="field"><span>Plan name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="FinPilot Pro Yearly" /></label>
       <label className="field"><span>Plan code</span><input value={code} onChange={(e) => setCode(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase())} placeholder="pro_yearly" /></label>
-      <label className="field"><span>Price (INR)</span><input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+      <label className="field"><span>Price (INR)</span><input type="number" min="0" step="0.01" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
       <label className="field"><span>Google Play product ID</span><input value={googlePlayProductId} onChange={(e) => setGooglePlayProductId(e.target.value.trim())} placeholder="finpilot_pro_monthly" /></label>
       <label className="field"><span>Billing period</span><select value={period} onChange={(e) => setPeriod(e.target.value)}><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="lifetime">Lifetime</option><option value="custom">Custom</option></select></label>
       <label className="field"><span>Access level</span><select value={access} onChange={(e) => setAccess(e.target.value)}><option value="pro">Pro</option><option value="free">Free</option></select></label>
@@ -885,7 +885,7 @@ function RecordPaymentModal({ users, plans, onClose, onSaved }: { users: UserRow
     <div className="control-grid">
       <label className="field"><span>User</span><select value={userId} onChange={(e) => setUserId(e.target.value)}>{users.map((u) => <option key={u.id} value={u.id}>{u.full_name || u.email} · {u.email}</option>)}</select></label>
       <label className="field"><span>Plan</span><select value={planId} onChange={(e) => { setPlanId(e.target.value); const plan = plans.find((p) => p.id === e.target.value); if (plan) setAmount(String(plan.price)); }}><option value="">No plan</option>{plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {money(p.price, p.currency)}</option>)}</select></label>
-      <label className="field"><span>Amount (INR)</span><input type="number" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+      <label className="field"><span>Amount (INR)</span><input type="number" min="0.01" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
       <label className="field"><span>Payment method</span><select value={method} onChange={(e) => setMethod(e.target.value)}><option value="bank_transfer">Bank transfer</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="google_play">Google Play</option><option value="other">Other</option></select></label>
       <label className="field"><span>Reference / transaction ID</span><input value={reference} onChange={(e) => setReference(e.target.value)} /></label>
     </div>
