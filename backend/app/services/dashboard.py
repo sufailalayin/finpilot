@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
@@ -44,6 +44,10 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             Transaction.user_id == user_id,
             Transaction.occurred_on >= period_start,
             Transaction.occurred_on <= period_end,
+            or_(
+                Transaction.merchant.is_(None),
+                Transaction.merchant.notin_(("Transfer out", "Transfer in")),
+            ),
         )
     )
     month = month_rows.one()
@@ -57,6 +61,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
 
     account_balances = []
     total_balance = Decimal("0.00")
+    card_liabilities = Decimal("0.00")
 
     for account in accounts:
         totals_result = await db.execute(
@@ -115,22 +120,30 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
                 LiabilityPayment.payment_account_id == account.id,
             )
         )
-        balance = (
-            account.opening_balance
-            + totals.income
+        movement = (
+            totals.income
             - totals.expense
             + (receivable_movement or Decimal("0.00"))
             + (liability_inflow or Decimal("0.00"))
             - (liability_outflow or Decimal("0.00"))
         )
-        total_balance += balance
+        if account.account_type.value == "card":
+            current_balance = max(
+                account.opening_balance - movement,
+                Decimal("0.00"),
+            )
+            card_liabilities += current_balance
+        else:
+            current_balance = account.opening_balance + movement
+            total_balance += current_balance
+
         account_balances.append(
             {
                 "account_id": str(account.id),
                 "account_name": account.name,
                 "account_type": account.account_type.value,
                 "currency": account.currency,
-                "balance": balance,
+                "balance": current_balance,
             }
         )
 
@@ -192,7 +205,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             )
         ).where(Liability.user_id == user_id)
     )
-    liabilities = liabilities or Decimal("0.00")
+    liabilities = (liabilities or Decimal("0.00")) + card_liabilities
 
     receivables = await db.scalar(
         select(
@@ -344,13 +357,13 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
         },
         {
             "title": "Debt",
-            "value": "₹" + format(liabilities, ",.0f"),
+            "value": "₹" + format(liabilities, ",.2f"),
             "subtitle": "Outstanding liabilities",
             "severity": "warning" if liabilities > 0 else "good",
         },
         {
             "title": "Investments",
-            "value": "₹" + format(investment_assets, ",.0f"),
+            "value": "₹" + format(investment_assets, ",.2f"),
             "subtitle": "Recorded asset value",
             "severity": "info",
         },

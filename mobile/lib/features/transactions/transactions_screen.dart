@@ -23,7 +23,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final _money = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
-    decimalDigits: 0,
+    decimalDigits: 2,
   );
 
   String _filter = 'all';
