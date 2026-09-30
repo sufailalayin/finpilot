@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+*.egg-info/
 
 # Flutter / Dart
 .dart_tool/

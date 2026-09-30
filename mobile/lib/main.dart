@@ -71,18 +71,89 @@ class _FinPilotAppState extends State<FinPilotApp> with WidgetsBindingObserver {
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF124D40),
-        scaffoldBackgroundColor: const Color(0xFFF3F6F5),
+        scaffoldBackgroundColor: const Color(0xFFF6F8F7),
         appBarTheme: const AppBarTheme(
           centerTitle: false,
           elevation: 0,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          titleTextStyle: TextStyle(
+            color: Color(0xFF102A24),
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-        cardTheme: const CardThemeData(
+        cardTheme: CardThemeData(
           elevation: 0,
           margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE5EBE8), width: 1),
+          ),
+          color: Colors.white,
         ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            side: const BorderSide(color: Color(0xFF124D40), width: 1.2),
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFD2DCD7)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFD2DCD7)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF124D40), width: 1.8),
+          ),
           filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: 68,
+          backgroundColor: Colors.white,
+          elevation: 2,
+          indicatorColor: const Color(0xFFD1ECE5),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF124D40),
+              );
+            }
+            return const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF6B7280),
+            );
+          }),
         ),
       ),
       home: FutureBuilder<bool>(

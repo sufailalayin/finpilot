@@ -163,7 +163,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   )
                 else
                   DropdownButtonFormField<String>(
-                    value: _accountId,
+                    initialValue: _accountId,
                     decoration: const InputDecoration(
                       labelText: 'Account',
                       border: OutlineInputBorder(),
@@ -190,7 +190,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String?>(
-                  value: _categoryId,
+                  initialValue: _categoryId,
                   decoration: const InputDecoration(
                     labelText: 'Category',
                     border: OutlineInputBorder(),

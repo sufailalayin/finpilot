@@ -115,40 +115,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 16),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.remove_circle_outline),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFFEE2E2),
+                    child: const Icon(
+                      Icons.arrow_upward_rounded,
+                      color: Color(0xFFDC2626),
+                    ),
                   ),
-                  title: const Text('Add expense'),
-                  subtitle: const Text('Record spending'),
+                  title: const Text(
+                    'Add expense',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Record money spent'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.pop(sheetContext, 'expense'),
                 ),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.add_circle_outline),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFDCFCE7),
+                    child: const Icon(
+                      Icons.arrow_downward_rounded,
+                      color: Color(0xFF16A34A),
+                    ),
                   ),
-                  title: const Text('Add income'),
-                  subtitle: const Text('Record salary or other income'),
+                  title: const Text(
+                    'Add income',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Record salary or deposit'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.pop(sheetContext, 'income'),
                 ),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.swap_horiz_rounded),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFDBEAFE),
+                    child: const Icon(
+                      Icons.swap_horiz_rounded,
+                      color: Color(0xFF2563EB),
+                    ),
                   ),
-                  title: const Text('Transfer money'),
-                  subtitle: const Text('Move money between your accounts'),
+                  title: const Text(
+                    'Transfer money',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Move money between accounts'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.pop(sheetContext, 'transfer'),
                 ),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.account_balance_wallet_outlined),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFE0F2F1),
+                    child: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: Color(0xFF0F766E),
+                    ),
                   ),
-                  title: const Text('Manage accounts'),
-                  subtitle: const Text(
-                    'Bank, cash, card and wallet balances',
+                  title: const Text(
+                    'Manage accounts',
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
+                  subtitle: const Text('Bank, cash, card and wallet balances'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.pop(sheetContext, 'accounts'),
                 ),
               ],
