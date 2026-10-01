@@ -3,7 +3,7 @@ import inspect
 import pytest
 from pydantic import ValidationError
 
-from app.routers.finance import net_worth_summary, remediate_account_currency
+from app.routers.finance import net_worth_summary, remediate_account_currency, update_account
 from app.routers.liabilities import debt_overview
 from app.routers.planning import budget_dashboard
 from app.schemas.finance import AccountCurrencyRemediation
@@ -56,3 +56,12 @@ def test_transaction_aggregates_filter_archived_accounts(function):
 
 def test_net_worth_filters_archived_accounts():
     assert "FinanceAccount.is_archived.is_(False)" in _source(net_worth_summary)
+
+
+
+def test_archived_account_update_is_read_only_except_name():
+    source = _source(update_account)
+    assert 'set(values) - {"name"}' in source
+    assert "Archived legacy accounts are read-only" in source
+    assert '"opening_balance" in values' in source
+    assert "ensure_supported_account_currency" in source
