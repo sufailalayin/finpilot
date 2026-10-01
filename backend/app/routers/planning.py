@@ -12,7 +12,7 @@ from app.dependencies.entitlements import require_pro_user
 from app.models.finance import Category, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
-from app.services.finance_currency import ensure_user_finance_currency
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 from app.schemas.planning import (
     BudgetCreate,
     BudgetResponse,
@@ -238,6 +238,7 @@ async def budget_dashboard(
     for budget in budgets:
         filters = [
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= min(today, budget.period_end),

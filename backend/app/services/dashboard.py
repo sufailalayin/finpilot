@@ -12,7 +12,7 @@ from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics, build_report
-from app.services.finance_currency import ensure_user_finance_currency
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
 
 async def build_dashboard(db: AsyncSession, user_id) -> dict:
@@ -44,6 +44,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             func.count(Transaction.id).label("count"),
         ).where(
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
             Transaction.occurred_on >= period_start,
             Transaction.occurred_on <= period_end,
             Transaction.is_internal_transfer.is_(False),
@@ -53,7 +54,10 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
 
     accounts_result = await db.execute(
         select(FinanceAccount)
-        .where(FinanceAccount.user_id == user_id)
+        .where(
+            FinanceAccount.user_id == user_id,
+            FinanceAccount.is_archived.is_(False),
+        )
         .order_by(FinanceAccount.created_at.asc())
     )
     accounts = list(accounts_result.scalars().all())
@@ -85,6 +89,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
                 ).label("expense"),
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
@@ -149,7 +154,10 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
     recent_result = await db.execute(
         select(Transaction, FinanceAccount.name)
         .join(FinanceAccount, FinanceAccount.id == Transaction.account_id)
-        .where(Transaction.user_id == user_id)
+        .where(
+            Transaction.user_id == user_id,
+            FinanceAccount.is_archived.is_(False),
+        )
         .order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc())
         .limit(10)
     )

@@ -11,9 +11,11 @@ from app.models.finance import Category, FinanceAccount, Transaction, Transactio
 from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
 from app.services.analytics import build_analytics
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
 
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     start = today.replace(day=1)
     end = today.replace(day=monthrange(today.year, today.month)[1])
@@ -41,6 +43,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 ).label("expense"),
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
             )
@@ -55,6 +58,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         .join(Transaction, Transaction.category_id == Category.id)
         .where(
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
@@ -68,7 +72,10 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         (
             await db.execute(
                 select(FinanceAccount)
-                .where(FinanceAccount.user_id == user_id)
+                .where(
+                    FinanceAccount.user_id == user_id,
+                    FinanceAccount.is_archived.is_(False),
+                )
                 .order_by(FinanceAccount.created_at.asc())
             )
         ).scalars().all()
@@ -89,6 +96,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 )
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
@@ -214,7 +222,10 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                     Transaction.merchant,
                     Transaction.note,
                 )
-                .where(Transaction.user_id == user_id)
+                .where(
+                    Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                )
                 .order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc())
                 .limit(20)
             )

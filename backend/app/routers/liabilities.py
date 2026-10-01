@@ -14,7 +14,7 @@ from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.receivable import ReceivableMovement
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
-from app.services.finance_currency import ensure_supported_account_currency, ensure_user_finance_currency
+from app.services.finance_currency import active_finance_account_ids, ensure_supported_account_currency, ensure_user_finance_currency
 from app.schemas.liability import (
     DebtOverview,
     LiabilityCreate,
@@ -271,6 +271,7 @@ async def debt_overview(
             )
         ).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
         )

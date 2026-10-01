@@ -15,12 +15,13 @@ from app.services.finance_currency import (
 )
 
 
-def _account(currency: str) -> FinanceAccount:
+def _account(currency: str, *, archived: bool = False) -> FinanceAccount:
     return FinanceAccount(
         user_id=uuid4(),
         name=f"{currency} account",
         account_type=AccountType.BANK,
         currency=currency,
+        is_archived=archived,
         opening_balance=Decimal("0.00"),
     )
 
@@ -111,3 +112,12 @@ def test_transfer_currency_guard_accepts_same_currency():
         _account("INR"),
         _account("inr"),
     )
+
+
+
+def test_supported_account_mutation_guard_rejects_archived_inr_account():
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_supported_account_currency(_account("INR", archived=True))
+
+    assert exc_info.value.status_code == 409
+    assert "Archived legacy accounts" in str(exc_info.value.detail)

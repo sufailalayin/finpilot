@@ -10,7 +10,7 @@ from app.models.finance import Category, FinanceAccount, Transaction, Transactio
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import ReceivableMovement
-from app.services.finance_currency import ensure_user_finance_currency
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
 
 async def build_analytics(db: AsyncSession, user_id) -> dict:
@@ -50,6 +50,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 ).label("expenses"),
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
                 Transaction.is_internal_transfer.is_(False),
@@ -77,6 +78,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
@@ -116,6 +118,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     for budget in budget_rows:
         conditions = [
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= budget.period_end,
@@ -153,7 +156,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     account_rows = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user_id)
+                select(FinanceAccount).where(FinanceAccount.user_id == user_id, FinanceAccount.is_archived.is_(False))
             )
         ).scalars().all()
     )
@@ -174,6 +177,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 )
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
@@ -514,7 +518,10 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
         (
             await db.execute(
                 select(FinanceAccount)
-                .where(FinanceAccount.user_id == user_id)
+                .where(
+                    FinanceAccount.user_id == user_id,
+                    FinanceAccount.is_archived.is_(False),
+                )
                 .order_by(FinanceAccount.created_at.asc())
             )
         ).scalars().all()
@@ -548,6 +555,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     ).label("expenses"),
                 ).where(
                     Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.occurred_on >= start,
                     Transaction.occurred_on <= end,
                     Transaction.is_internal_transfer.is_(False),
@@ -578,6 +586,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     )
                 ).where(
                     Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.account_id == account.id,
                     Transaction.occurred_on <= end,
                 )
@@ -649,6 +658,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= current_start,
                 Transaction.occurred_on <= current_end,
