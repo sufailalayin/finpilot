@@ -1,7 +1,7 @@
 name: FinPilot Signed Android Release
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   workflow_run:
@@ -28,10 +28,12 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Resolve release version
         id: version
@@ -54,7 +56,8 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Validate repository signing configuration
+      - name: Select signing source
+        id: signing
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -62,17 +65,22 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL || 'https://finpilot-backend-production-eaf5.up.railway.app/api/v1' }}
         run: |
-          test -n "$KEYSTORE_B64" || (echo "Missing repository secret ANDROID_KEYSTORE_BASE64" && exit 1)
-          test -n "$STORE_PASSWORD" || (echo "Missing repository secret ANDROID_KEYSTORE_PASSWORD" && exit 1)
-          test -n "$KEY_ALIAS" || (echo "Missing repository secret ANDROID_KEY_ALIAS" && exit 1)
-          test -n "$KEY_PASSWORD" || (echo "Missing repository secret ANDROID_KEY_PASSWORD" && exit 1)
           test -n "$API_BASE_URL" || (echo "Missing FINPILOT_API_BASE_URL" && exit 1)
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "mode=github" >> "$GITHUB_OUTPUT"
+            echo "Using GitHub production signing secrets."
+          else
+            echo "mode=railway" >> "$GITHUB_OUTPUT"
+            echo "GitHub signing secrets are unavailable; using the Railway signed builder fallback."
+          fi
 
       - uses: subosito/flutter-action@v2
+        if: steps.signing.outputs.mode == 'github'
         with:
           channel: stable
 
       - name: Generate Android project
+        if: steps.signing.outputs.mode == 'github'
         run: |
           flutter create --platforms=android --org com.hastronventures --project-name finpilot /tmp/finpilot_release
           rm -rf /tmp/finpilot_release/lib
@@ -81,6 +89,7 @@ jobs:
           cp mobile/pubspec.yaml /tmp/finpilot_release/pubspec.yaml
 
       - name: Apply release version
+        if: steps.signing.outputs.mode == 'github'
         working-directory: /tmp/finpilot_release
         run: |
           python - <<'PY'
@@ -99,6 +108,7 @@ jobs:
           PY
 
       - name: Prepare biometric host and FinPilot branding
+        if: steps.signing.outputs.mode == 'github'
         run: |
           cat > /tmp/finpilot_release/android/app/src/main/kotlin/com/hastronventures/finpilot/MainActivity.kt <<'EOF'
           package com.hastronventures.finpilot
@@ -163,6 +173,7 @@ jobs:
           PY
 
       - name: Restore Android signing key
+        if: steps.signing.outputs.mode == 'github'
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -179,6 +190,7 @@ jobs:
           EOF
 
       - name: Configure release signing
+        if: steps.signing.outputs.mode == 'github'
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -227,35 +239,41 @@ jobs:
           PY
 
       - name: Install dependencies
+        if: steps.signing.outputs.mode == 'github'
         working-directory: /tmp/finpilot_release
         run: flutter pub get
 
       - name: Analyze
+        if: steps.signing.outputs.mode == 'github'
         working-directory: /tmp/finpilot_release
         run: flutter analyze --no-fatal-infos
 
       - name: Build signed release APK
+        if: steps.signing.outputs.mode == 'github'
         working-directory: /tmp/finpilot_release
         env:
-          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL || 'https://finpilot-backend-production-eaf5.up.railway.app/api/v1' }}
         run: >
           flutter build apk --release
           --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
 
       - name: Build signed release AAB
+        if: steps.signing.outputs.mode == 'github'
         working-directory: /tmp/finpilot_release
         env:
-          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL }}
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL || 'https://finpilot-backend-production-eaf5.up.railway.app/api/v1' }}
         run: >
           flutter build appbundle --release
           --dart-define=FINPILOT_API_BASE_URL="$API_BASE_URL"
 
       - name: Verify APK signature
+        if: steps.signing.outputs.mode == 'github'
         run: |
           APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload signed Android artifacts
+        if: steps.signing.outputs.mode == 'github'
         uses: actions/upload-artifact@v4
         with:
           name: finpilot-signed-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
@@ -263,3 +281,80 @@ jobs:
           path: |
             /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk
             /tmp/finpilot_release/build/app/outputs/bundle/release/app-release.aab
+
+
+      - name: Sync release to Railway signing branch
+        if: steps.signing.outputs.mode == 'railway'
+        env:
+          RAILWAY_SIGNING_BRANCH: build/direct-signed-finpilot-1.1.2
+        run: |
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$RAILWAY_SIGNING_BRANCH"
+          git switch -C railway-signer "origin/$RAILWAY_SIGNING_BRANCH"
+          git merge --no-edit "$RELEASE_SHA"
+          git push origin "HEAD:$RAILWAY_SIGNING_BRANCH"
+
+      - name: Wait for Railway signed artifacts
+        if: steps.signing.outputs.mode == 'railway'
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          BUILDER_BASE_URL: https://finpilot-signed-builder-production.up.railway.app
+        run: |
+          ready=0
+          for attempt in $(seq 1 90); do
+            info="$(curl -fsSL "$BUILDER_BASE_URL/BUILD_INFO.txt?run=$GITHUB_RUN_ID-$attempt" || true)"
+            if printf '%s\n' "$info" | grep -qx "version_name=$VERSION_NAME" \
+              && printf '%s\n' "$info" | grep -qx "version_code=$VERSION_CODE"; then
+              ready=1
+              break
+            fi
+            sleep 10
+          done
+          test "$ready" = "1" || (echo "Railway signed builder did not publish the requested version" && exit 1)
+
+      - name: Download and verify Railway signed artifacts
+        if: steps.signing.outputs.mode == 'railway'
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          BUILDER_BASE_URL: https://finpilot-signed-builder-production.up.railway.app
+        run: |
+          set -euo pipefail
+          OUT=/tmp/railway-signed
+          mkdir -p "$OUT"
+          APK="FinPilot-$VERSION_NAME-build$VERSION_CODE-production.apk"
+          AAB="FinPilot-$VERSION_NAME-build$VERSION_CODE-production.aab"
+
+          curl -fsSL "$BUILDER_BASE_URL/$APK?run=$GITHUB_RUN_ID" -o "$OUT/$APK"
+          curl -fsSL "$BUILDER_BASE_URL/$AAB?run=$GITHUB_RUN_ID" -o "$OUT/$AAB"
+          curl -fsSL "$BUILDER_BASE_URL/SHA256SUMS.txt?run=$GITHUB_RUN_ID" -o "$OUT/SHA256SUMS.txt"
+          curl -fsSL "$BUILDER_BASE_URL/BUILD_INFO.txt?run=$GITHUB_RUN_ID" -o "$OUT/BUILD_INFO.txt"
+
+          expected_apk="$(grep "$APK" "$OUT/SHA256SUMS.txt" | awk '{print $1}')"
+          expected_aab="$(grep "$AAB" "$OUT/SHA256SUMS.txt" | awk '{print $1}')"
+          actual_apk="$(sha256sum "$OUT/$APK" | awk '{print $1}')"
+          actual_aab="$(sha256sum "$OUT/$AAB" | awk '{print $1}')"
+
+          test -n "$expected_apk"
+          test -n "$expected_aab"
+          test "$expected_apk" = "$actual_apk"
+          test "$expected_aab" = "$actual_aab"
+
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$OUT/$APK"
+
+      - name: Upload Railway signed Android artifacts
+        if: steps.signing.outputs.mode == 'railway'
+        uses: actions/upload-artifact@v4
+        with:
+          name: finpilot-signed-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          retention-days: 14
+          path: |
+            /tmp/railway-signed/FinPilot-${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}-production.apk
+            /tmp/railway-signed/FinPilot-${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}-production.aab
+            /tmp/railway-signed/SHA256SUMS.txt
+            /tmp/railway-signed/BUILD_INFO.txt
