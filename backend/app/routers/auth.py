@@ -253,11 +253,12 @@ async def verify_register_otp(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(
+async def _password_login(
     payload: LoginRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession,
+    *,
+    admin_portal: bool,
 ) -> TokenResponse:
     email = payload.email.lower().strip()
     result = await db.execute(
@@ -316,6 +317,18 @@ async def login(
             detail="Email verification required",
         )
 
+    if admin_portal:
+        if not user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Administrator access required",
+            )
+    elif user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
+
     clear_login_failures(user)
 
     if user.entitlement is not None:
@@ -352,6 +365,34 @@ async def login(
         ),
         refresh_token=refresh_token,
         user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    payload: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    return await _password_login(
+        payload,
+        request,
+        db,
+        admin_portal=False,
+    )
+
+
+@router.post("/admin/login", response_model=TokenResponse)
+async def admin_login(
+    payload: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    return await _password_login(
+        payload,
+        request,
+        db,
+        admin_portal=True,
     )
 
 
