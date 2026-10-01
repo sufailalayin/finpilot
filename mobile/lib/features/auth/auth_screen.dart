@@ -7,6 +7,7 @@ import '../security/security_setup_gate.dart';
 import 'auth_service.dart';
 import 'email_verification_screen.dart';
 import 'forgot_password_screen.dart';
+import 'password_policy.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.api});
@@ -34,7 +35,9 @@ class _AuthScreenState extends State<AuthScreen> {
     final email = _email.text.trim();
     final password = _password.text;
     final emailOk = email.contains('@') && email.contains('.');
-    final passwordOk = password.length >= 10;
+    final passwordOk = _registerMode
+        ? newPasswordLooksValid(password)
+        : loginPasswordLooksValid(password);
     final nameOk = !_registerMode || _name.text.trim().isNotEmpty;
     final legalOk = !_registerMode || _legalAccepted;
     return emailOk && passwordOk && nameOk && legalOk;
@@ -288,7 +291,9 @@ class _AuthScreenState extends State<AuthScreen> {
                                 onSubmitted: (_) => _submit(),
                                 decoration: InputDecoration(
                                   labelText: 'Password',
-                                  hintText: 'Minimum 8 characters',
+                                  hintText: _registerMode
+                                      ? 'Minimum 10 characters'
+                                      : 'Enter your password',
                                   prefixIcon: const Icon(Icons.lock_outline),
                                   suffixIcon: IconButton(
                                     tooltip: _obscurePassword
