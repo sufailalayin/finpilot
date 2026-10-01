@@ -14,6 +14,12 @@ from app.services.analytics import build_analytics
 from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
 
+def _ai_account_balance(account: FinanceAccount, movement: Decimal) -> tuple[Decimal, bool]:
+    if account.account_type.value == "card":
+        return max(account.opening_balance - movement, Decimal("0.00")), True
+    return account.opening_balance + movement, False
+
+
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
     await ensure_user_finance_currency(db, user_id)
     today = date.today()
@@ -83,6 +89,8 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         ).scalars().all()
     )
     accounts = []
+    account_total = Decimal("0.00")
+    card_liabilities = Decimal("0.00")
     for account in account_models:
         movement = await db.scalar(
             select(
@@ -102,13 +110,20 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 Transaction.account_id == account.id,
             )
         )
+        current_balance, is_card_liability = _ai_account_balance(
+            account,
+            movement or Decimal("0.00"),
+        )
+        if is_card_liability:
+            card_liabilities += current_balance
+        else:
+            account_total += current_balance
+
         accounts.append(
             {
                 "name": account.name,
                 "account_type": account.account_type.value,
-                "current_balance": str(
-                    account.opening_balance + (movement or Decimal("0.00"))
-                ),
+                "current_balance": str(current_balance),
             }
         )
 
@@ -236,15 +251,12 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
     )
 
     health = await build_analytics(db, user_id)
-    account_total = sum(
-        (Decimal(account["current_balance"]) for account in accounts),
-        Decimal("0.00"),
-    )
     asset_total = sum((row.current_value for row in assets), Decimal("0.00"))
     debt_total = sum(
         (row.outstanding_principal for row in liabilities),
         Decimal("0.00"),
     )
+    total_liabilities = debt_total + card_liabilities
 
     return {
         "month": {
@@ -262,8 +274,8 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         "wealth_summary": {
             "liquid_accounts": str(account_total),
             "investment_assets": str(asset_total),
-            "liabilities": str(debt_total),
-            "net_worth": str(account_total + asset_total - debt_total),
+            "liabilities": str(total_liabilities),
+            "net_worth": str(account_total + asset_total - total_liabilities),
         },
         "budgets": [
             {
