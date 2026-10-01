@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -5,6 +6,11 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from app.models.finance import AccountType, TransactionType
+
+
+class DirectTransactionType(str, enum.Enum):
+    INCOME = "income"
+    EXPENSE = "expense"
 
 
 class AccountCreate(BaseModel):
@@ -68,15 +74,22 @@ class CategoryResponse(CategoryCreate):
 class TransactionCreate(BaseModel):
     account_id: uuid.UUID
     category_id: uuid.UUID | None = None
-    transaction_type: TransactionType
+    transaction_type: DirectTransactionType
     amount: Decimal = Field(gt=0)
     occurred_on: date
     merchant: str | None = Field(default=None, max_length=120)
     note: str | None = None
 
 
-class TransactionResponse(TransactionCreate):
+class TransactionResponse(BaseModel):
     id: uuid.UUID
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    transaction_type: TransactionType
+    amount: Decimal
+    occurred_on: date
+    merchant: str | None = None
+    note: str | None = None
     is_internal_transfer: bool = False
     created_at: datetime
     model_config = {"from_attributes": True}
@@ -85,7 +98,7 @@ class TransactionResponse(TransactionCreate):
 class TransactionUpdate(BaseModel):
     account_id: uuid.UUID | None = None
     category_id: uuid.UUID | None = None
-    transaction_type: TransactionType | None = None
+    transaction_type: DirectTransactionType | None = None
     amount: Decimal | None = Field(default=None, gt=0)
     occurred_on: date | None = None
     merchant: str | None = Field(default=None, max_length=120)
