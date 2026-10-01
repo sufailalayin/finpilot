@@ -1,14 +1,14 @@
 """Publish FinPilot 1.1.3 build 6 through the app update channel.
 
 Revision ID: 0024_publish_app_release_1_1_3
-Revises: 0023_refresh_session_token_version_compat
+Revises: 0023_refresh_token_ver
 """
 
 from alembic import op
 
 
 revision = "0024_publish_app_release_1_1_3"
-down_revision = "0023_refresh_session_token_version_compat"
+down_revision = "0023_refresh_token_ver"
 branch_labels = None
 depends_on = None
 
