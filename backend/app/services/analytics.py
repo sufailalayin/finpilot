@@ -10,9 +10,11 @@ from app.models.finance import Category, FinanceAccount, Transaction, Transactio
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import ReceivableMovement
+from app.services.finance_currency import ensure_user_finance_currency
 
 
 async def build_analytics(db: AsyncSession, user_id) -> dict:
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     start = today.replace(day=1)
     end = today.replace(day=monthrange(today.year, today.month)[1])
@@ -503,6 +505,7 @@ def _month_shift(year: int, month: int, offset: int) -> tuple[int, int]:
 async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
     from app.models.finance import FinanceAccount
 
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     months = max(2, min(months, 24))
     trend: list[dict] = []
