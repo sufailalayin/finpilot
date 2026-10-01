@@ -58,15 +58,17 @@ class AccountResponse(AccountCreate):
 
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    transaction_type: TransactionType
+    transaction_type: DirectTransactionType
 
 
 class CategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
 
 
-class CategoryResponse(CategoryCreate):
+class CategoryResponse(BaseModel):
     id: uuid.UUID
+    name: str
+    transaction_type: TransactionType
     created_at: datetime
     model_config = {"from_attributes": True}
 
