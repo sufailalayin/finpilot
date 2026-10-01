@@ -355,6 +355,15 @@ async def _password_login(
     )
     await db.commit()
 
+    if admin_portal:
+        return TokenResponse(
+            access_token=create_access_token(
+                str(user.id),
+                user.token_version,
+            ),
+            user=UserResponse.model_validate(user),
+        )
+
     _, refresh_token = await issue_refresh_session(db, user=user)
     await db.commit()
 
@@ -510,6 +519,14 @@ async def refresh_session(
         )
 
     user, new_refresh_token = rotated
+    if user.is_admin:
+        await revoke_all_refresh_sessions(db, user_id=user.id)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
+
     await db.commit()
     return TokenResponse(
         access_token=create_access_token(
