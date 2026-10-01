@@ -89,7 +89,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
                 ).label("expense"),
             ).where(
                 Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
