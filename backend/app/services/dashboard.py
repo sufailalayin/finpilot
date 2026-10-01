@@ -12,9 +12,11 @@ from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics, build_report
+from app.services.finance_currency import ensure_user_finance_currency
 
 
 async def build_dashboard(db: AsyncSession, user_id) -> dict:
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     period_start = today.replace(day=1)
     period_end = today.replace(day=monthrange(today.year, today.month)[1])

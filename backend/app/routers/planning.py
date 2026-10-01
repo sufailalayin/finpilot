@@ -12,6 +12,7 @@ from app.dependencies.entitlements import require_pro_user
 from app.models.finance import Category, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
+from app.services.finance_currency import ensure_user_finance_currency
 from app.schemas.planning import (
     BudgetCreate,
     BudgetResponse,
@@ -219,6 +220,7 @@ async def budget_dashboard(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> BudgetDashboard:
+    await ensure_user_finance_currency(db, user.id)
     today = date.today()
     budgets = list((await db.execute(
         select(Budget).where(
