@@ -18,14 +18,6 @@ from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountRe
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 
-def _ensure_direct_transaction_type(transaction_type: TransactionType | None) -> None:
-    if transaction_type == TransactionType.TRANSFER:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Use /finance/transfers for account-to-account transfers",
-        )
-
-
 DEFAULT_CATEGORIES = {
     "expense": [
         "Food & Dining",
@@ -94,8 +86,6 @@ async def list_categories(user: User = Depends(get_current_user), db: AsyncSessi
 
 @router.post("/transactions", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
 async def create_transaction(payload: TransactionCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> TransactionResponse:
-    _ensure_direct_transaction_type(payload.transaction_type)
-
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == payload.account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
@@ -109,7 +99,7 @@ async def create_transaction(payload: TransactionCreate, user: User = Depends(ge
         user_id=user.id,
         account_id=payload.account_id,
         category_id=payload.category_id,
-        transaction_type=payload.transaction_type,
+        transaction_type=TransactionType(payload.transaction_type.value),
         amount=payload.amount,
         occurred_on=payload.occurred_on,
         merchant=payload.merchant.strip() if payload.merchant else None,
@@ -326,7 +316,8 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
             detail="Internal transfer rows cannot be edited individually",
         )
     values = payload.model_dump(exclude_unset=True)
-    _ensure_direct_transaction_type(values.get("transaction_type"))
+    if "transaction_type" in values:
+        values["transaction_type"] = TransactionType(values["transaction_type"].value)
     if "account_id" in values:
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
