@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import 'auth_service.dart';
+import 'password_policy.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key, required this.api});
@@ -83,8 +84,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _error = 'Enter the 6-digit reset code.');
       return;
     }
-    if (password.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters.');
+    if (!newPasswordLooksValid(password)) {
+      setState(() => _error =
+          'Password must be at least $minimumNewPasswordLength characters.');
       return;
     }
     if (password != _confirm.text) {
@@ -184,6 +186,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   labelText: 'New password',
+                  helperText: 'Minimum 10 characters',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscure = !_obscure),
