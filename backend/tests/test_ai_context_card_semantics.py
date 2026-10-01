@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from app.models.finance import AccountType, FinanceAccount
-from app.services.ai_context import _ai_account_balance, build_finance_context
+from app.services.ai_context import _ai_account_balance, _ai_net_worth, build_finance_context
 
 
 def _account(account_type: AccountType, opening_balance: str) -> FinanceAccount:
@@ -52,4 +52,9 @@ def test_ai_wealth_summary_subtracts_card_liabilities():
     assert "card_liabilities += current_balance" in source
     assert "account_total += current_balance" in source
     assert "total_liabilities = debt_total + card_liabilities" in source
-    assert '"net_worth": str(account_total + asset_total - total_liabilities)' in source
+    assert _ai_net_worth(
+        Decimal("1000.00"),
+        Decimal("500.00"),
+        Decimal("200.00"),
+        Decimal("300.00"),
+    ) == Decimal("1400.00")
