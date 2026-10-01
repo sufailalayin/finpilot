@@ -35,6 +35,15 @@ def _ai_account_movement(
     )
 
 
+def _ai_net_worth(
+    account_total: Decimal,
+    asset_total: Decimal,
+    receivables_total: Decimal,
+    total_liabilities: Decimal,
+) -> Decimal:
+    return account_total + asset_total + receivables_total - total_liabilities
+
+
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
     await ensure_user_finance_currency(db, user_id)
     today = date.today()
@@ -340,7 +349,12 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
             "receivables": str(receivables_total),
             "liabilities": str(total_liabilities),
             "net_worth": str(
-                account_total + asset_total + receivables_total - total_liabilities
+                _ai_net_worth(
+                    account_total,
+                    asset_total,
+                    receivables_total,
+                    total_liabilities,
+                )
             ),
         },
         "budgets": [
