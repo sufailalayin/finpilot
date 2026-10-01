@@ -167,3 +167,106 @@ async def test_health_score_waits_for_income_instead_of_rating_expense_only_data
         assert data["health_score_available"] is False
         assert data["financial_health_score"] == 0
         assert data["health_grade"] == "Not enough data"
+
+@pytest.mark.asyncio
+async def test_internal_transfer_marker_survives_merchant_edit_and_real_transfer_label_counts():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        headers = await _register(client, "transfer-marker")
+        today = date.today().isoformat()
+
+        main = await client.post(
+            "/api/v1/finance/accounts",
+            headers=headers,
+            json={
+                "name": "Main",
+                "account_type": "bank",
+                "currency": "INR",
+                "opening_balance": "0.00",
+            },
+        )
+        assert main.status_code == 201, main.text
+        main_id = main.json()["id"]
+
+        savings = await client.post(
+            "/api/v1/finance/accounts",
+            headers=headers,
+            json={
+                "name": "Savings",
+                "account_type": "bank",
+                "currency": "INR",
+                "opening_balance": "0.00",
+            },
+        )
+        assert savings.status_code == 201, savings.text
+        savings_id = savings.json()["id"]
+
+        income = await client.post(
+            "/api/v1/finance/transactions",
+            headers=headers,
+            json={
+                "account_id": main_id,
+                "category_id": None,
+                "transaction_type": "income",
+                "amount": "1000.00",
+                "occurred_on": today,
+                "merchant": "Salary",
+                "note": None,
+            },
+        )
+        assert income.status_code == 201, income.text
+
+        transfer = await client.post(
+            "/api/v1/finance/transfers",
+            headers=headers,
+            json={
+                "from_account_id": main_id,
+                "to_account_id": savings_id,
+                "amount": "250.00",
+                "occurred_on": today,
+                "note": "Move to savings",
+            },
+        )
+        assert transfer.status_code == 201, transfer.text
+
+        outgoing_id = transfer.json()["outgoing"]["id"]
+        edited = await client.patch(
+            f"/api/v1/finance/transactions/{outgoing_id}",
+            headers=headers,
+            json={"merchant": "Edited transfer label"},
+        )
+        assert edited.status_code == 200, edited.text
+
+        real_expense = await client.post(
+            "/api/v1/finance/transactions",
+            headers=headers,
+            json={
+                "account_id": main_id,
+                "category_id": None,
+                "transaction_type": "expense",
+                "amount": "100.00",
+                "occurred_on": today,
+                "merchant": "Transfer out",
+                "note": "Legitimate merchant text",
+            },
+        )
+        assert real_expense.status_code == 201, real_expense.text
+
+        dashboard = await client.get("/api/v1/dashboard", headers=headers)
+        assert dashboard.status_code == 200, dashboard.text
+        data = dashboard.json()
+
+        assert data["summary"]["month_income"] == "1000.00"
+        assert data["summary"]["month_expense"] == "100.00"
+        assert data["summary"]["month_net"] == "900.00"
+        assert data["savings_rate"] == 90.0
+
+        balances = await client.get(
+            "/api/v1/finance/accounts/balances",
+            headers=headers,
+        )
+        assert balances.status_code == 200, balances.text
+        by_name = {row["name"]: row for row in balances.json()}
+        assert by_name["Main"]["current_balance"] == "650.00"
+        assert by_name["Savings"]["current_balance"] == "250.00"
+

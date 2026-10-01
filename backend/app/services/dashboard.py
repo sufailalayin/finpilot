@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
@@ -44,10 +44,7 @@ async def build_dashboard(db: AsyncSession, user_id) -> dict:
             Transaction.user_id == user_id,
             Transaction.occurred_on >= period_start,
             Transaction.occurred_on <= period_end,
-            or_(
-                Transaction.merchant.is_(None),
-                Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-            ),
+            Transaction.is_internal_transfer.is_(False),
         )
     )
     month = month_rows.one()

@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
@@ -50,10 +50,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 Transaction.user_id == user_id,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
         )
     ).one()
@@ -81,10 +78,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())
@@ -123,10 +117,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= budget.period_end,
-            or_(
-                Transaction.merchant.is_(None),
-                Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-            ),
+            Transaction.is_internal_transfer.is_(False),
         ]
         if budget.category_id is not None:
             conditions.append(Transaction.category_id == budget.category_id)
@@ -556,10 +547,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     Transaction.user_id == user_id,
                     Transaction.occurred_on >= start,
                     Transaction.occurred_on <= end,
-                    or_(
-                        Transaction.merchant.is_(None),
-                        Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                    ),
+                    Transaction.is_internal_transfer.is_(False),
                 )
             )
         ).one()
@@ -661,10 +649,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= current_start,
                 Transaction.occurred_on <= current_end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())
