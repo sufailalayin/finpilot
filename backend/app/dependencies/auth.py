@@ -45,6 +45,15 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
 
     path = request.url.path
+    admin_surface = (
+        path.startswith("/api/v1/admin")
+        or path.startswith("/api/v1/auth/admin")
+    )
+    if user.is_admin and not admin_surface:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
     access_exempt = (
         path.startswith("/api/v1/subscriptions/status")
         or path.startswith("/api/v1/subscriptions/plans")
