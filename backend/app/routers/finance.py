@@ -14,7 +14,7 @@ from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
 from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
-from app.services.finance_currency import ensure_same_transfer_currency, ensure_user_finance_currency
+from app.services.finance_currency import ensure_same_transfer_currency, ensure_supported_account_currency, ensure_user_finance_currency
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -126,6 +126,7 @@ async def create_transaction(payload: TransactionCreate, user: User = Depends(ge
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == payload.account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    ensure_supported_account_currency(account)
 
     transaction_type = TransactionType(payload.transaction_type.value)
     if payload.category_id is not None:
@@ -363,6 +364,17 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
+    elif {"amount", "transaction_type", "occurred_on"} & values.keys():
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == transaction.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
 
     effective_transaction_type = values.get(
         "transaction_type",
