@@ -50,7 +50,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 ).label("expenses"),
             ).where(
                 Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
                 Transaction.is_internal_transfer.is_(False),
@@ -78,7 +78,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
@@ -177,7 +177,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 )
             ).where(
                 Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
@@ -555,7 +555,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     ).label("expenses"),
                 ).where(
                     Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.occurred_on >= start,
                     Transaction.occurred_on <= end,
                     Transaction.is_internal_transfer.is_(False),
@@ -586,7 +586,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     )
                 ).where(
                     Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.account_id == account.id,
                     Transaction.occurred_on <= end,
                 )
@@ -658,7 +658,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
-            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= current_start,
                 Transaction.occurred_on <= current_end,
