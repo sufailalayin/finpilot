@@ -10,7 +10,7 @@ from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
-from app.models.receivable import ReceivableMovement
+from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics
 from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
@@ -303,6 +303,18 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
 
     health = await build_analytics(db, user_id)
     asset_total = sum((row.current_value for row in assets), Decimal("0.00"))
+    receivables_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Receivable.original_amount - Receivable.amount_received),
+                Decimal("0.00"),
+            )
+        ).where(
+            Receivable.user_id == user_id,
+            Receivable.amount_received < Receivable.original_amount,
+        )
+    )
+    receivables_total = receivables_total or Decimal("0.00")
     debt_total = sum(
         (row.outstanding_principal for row in liabilities),
         Decimal("0.00"),
@@ -325,8 +337,11 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         "wealth_summary": {
             "liquid_accounts": str(account_total),
             "investment_assets": str(asset_total),
+            "receivables": str(receivables_total),
             "liabilities": str(total_liabilities),
-            "net_worth": str(account_total + asset_total - total_liabilities),
+            "net_worth": str(
+                account_total + asset_total + receivables_total - total_liabilities
+            ),
         },
         "budgets": [
             {
