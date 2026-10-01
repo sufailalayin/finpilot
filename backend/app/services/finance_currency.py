@@ -32,7 +32,19 @@ def ensure_supported_currencies(currencies: Iterable[str]) -> None:
         )
 
 
+def active_finance_account_ids(user_id: uuid.UUID):
+    return select(FinanceAccount.id).where(
+        FinanceAccount.user_id == user_id,
+        FinanceAccount.is_archived.is_(False),
+    )
+
+
 def ensure_supported_account_currency(account: FinanceAccount) -> None:
+    if account.is_archived:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Archived legacy accounts cannot receive new money activity",
+        )
     if normalize_currency(account.currency) != SUPPORTED_FINANCE_CURRENCY:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -48,7 +60,10 @@ async def ensure_user_finance_currency(
     user_id: uuid.UUID,
 ) -> None:
     rows = await db.scalars(
-        select(FinanceAccount.currency).where(FinanceAccount.user_id == user_id)
+        select(FinanceAccount.currency).where(
+            FinanceAccount.user_id == user_id,
+            FinanceAccount.is_archived.is_(False),
+        )
     )
     ensure_supported_currencies(rows.all())
 
