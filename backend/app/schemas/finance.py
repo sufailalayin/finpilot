@@ -14,6 +14,11 @@ class DirectTransactionType(str, enum.Enum):
     EXPENSE = "expense"
 
 
+class CurrencyRemediationMode(str, enum.Enum):
+    METADATA_CORRECTION = "metadata_correction"
+    ARCHIVE_LEGACY = "archive_legacy"
+
+
 class AccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     account_type: AccountType
@@ -45,6 +50,7 @@ class AccountBalanceResponse(BaseModel):
     name: str
     account_type: AccountType
     currency: str
+    is_archived: bool = False
     opening_balance: Decimal
     current_balance: Decimal
     credit_limit: Decimal | None = None
@@ -61,6 +67,7 @@ class AccountResponse(BaseModel):
     name: str
     account_type: AccountType
     currency: str
+    is_archived: bool = False
     opening_balance: Decimal
     credit_limit: Decimal | None = None
     card_last4: str | None = None
@@ -68,6 +75,17 @@ class AccountResponse(BaseModel):
     payment_due_day: int | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+class AccountCurrencyRemediation(BaseModel):
+    mode: CurrencyRemediationMode
+    confirmation: Literal["REMEDIATE_LEGACY_CURRENCY"]
+
+
+class AccountCurrencyRemediationResponse(BaseModel):
+    account: AccountResponse
+    action: CurrencyRemediationMode
+    historical_activity_count: int
 
 
 class CategoryCreate(BaseModel):
