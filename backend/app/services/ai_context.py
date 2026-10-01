@@ -58,6 +58,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         .join(Transaction, Transaction.category_id == Category.id)
         .where(
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
