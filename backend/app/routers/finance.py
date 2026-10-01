@@ -18,6 +18,38 @@ from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountRe
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 
+def _ensure_category_type(
+    category: Category,
+    transaction_type: TransactionType,
+) -> None:
+    if category.transaction_type != transaction_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category type must match transaction type",
+        )
+
+
+async def _load_transaction_category(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    category_id: uuid.UUID,
+    transaction_type: TransactionType,
+) -> Category:
+    category = await db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+    if category is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
+    _ensure_category_type(category, transaction_type)
+    return category
+
+
 DEFAULT_CATEGORIES = {
     "expense": [
         "Food & Dining",
@@ -90,16 +122,20 @@ async def create_transaction(payload: TransactionCreate, user: User = Depends(ge
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
 
+    transaction_type = TransactionType(payload.transaction_type.value)
     if payload.category_id is not None:
-        category = await db.scalar(select(Category).where(Category.id == payload.category_id, Category.user_id == user.id))
-        if category is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+        await _load_transaction_category(
+            db,
+            user.id,
+            payload.category_id,
+            transaction_type,
+        )
 
     transaction = Transaction(
         user_id=user.id,
         account_id=payload.account_id,
         category_id=payload.category_id,
-        transaction_type=TransactionType(payload.transaction_type.value),
+        transaction_type=transaction_type,
         amount=payload.amount,
         occurred_on=payload.occurred_on,
         merchant=payload.merchant.strip() if payload.merchant else None,
@@ -322,10 +358,24 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
-    if values.get("category_id") is not None:
-        category = await db.scalar(select(Category).where(Category.id == values["category_id"], Category.user_id == user.id))
-        if category is None:
-            raise HTTPException(status_code=404, detail="Category not found")
+
+    effective_transaction_type = values.get(
+        "transaction_type",
+        transaction.transaction_type,
+    )
+    effective_category_id = (
+        values["category_id"]
+        if "category_id" in values
+        else transaction.category_id
+    )
+    if effective_category_id is not None:
+        await _load_transaction_category(
+            db,
+            user.id,
+            effective_category_id,
+            effective_transaction_type,
+        )
+
     for field, value in values.items():
         if field == "merchant" and value:
             value = value.strip()
