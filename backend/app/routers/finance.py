@@ -408,7 +408,15 @@ async def update_account(account_id: uuid.UUID, payload: AccountUpdate, user: Us
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    if account.is_archived and set(values) - {"name"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Archived legacy accounts are read-only except for their display name",
+        )
+    if "opening_balance" in values:
+        ensure_supported_account_currency(account)
+    for field, value in values.items():
         if field == "name" and value is not None:
             value = value.strip()
         setattr(account, field, value)
