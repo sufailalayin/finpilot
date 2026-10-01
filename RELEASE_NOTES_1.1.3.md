@@ -14,7 +14,7 @@ Build 6
 - Financial health now waits for recorded income instead of producing a misleading score from expense-only data.
 - Added regression tests for admin-plan handling and finance calculation accuracy.
 
-
 ## Release pipeline
 
 - Re-triggered the signed Android release after restoring repository-level signing secrets and API configuration.
+- Publish signed APK, AAB, SHA256SUMS.txt, and BUILD_INFO.txt as durable GitHub Release assets for build 6.
