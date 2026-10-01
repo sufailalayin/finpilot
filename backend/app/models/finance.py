@@ -36,6 +36,7 @@ class FinanceAccount(Base):
     name: Mapped[str] = mapped_column(String(120))
     account_type: Mapped[AccountType] = mapped_column(Enum(AccountType, name="account_type"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"))
     credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
