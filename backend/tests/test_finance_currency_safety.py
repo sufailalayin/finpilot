@@ -10,6 +10,7 @@ from app.models.finance import AccountType, FinanceAccount
 from app.schemas.finance import AccountCreate, AccountResponse
 from app.services.finance_currency import (
     ensure_same_transfer_currency,
+    ensure_supported_account_currency,
     ensure_supported_currencies,
 )
 
@@ -72,6 +73,18 @@ def test_aggregate_currency_guard_rejects_legacy_non_inr():
     assert "INR only" in str(exc_info.value.detail)
 
 
+def test_supported_account_mutation_guard_rejects_legacy_non_inr():
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_supported_account_currency(_account("USD"))
+
+    assert exc_info.value.status_code == 409
+    assert "New money movements" in str(exc_info.value.detail)
+
+
+def test_supported_account_mutation_guard_accepts_inr():
+    ensure_supported_account_currency(_account("inr"))
+
+
 def test_transfer_currency_guard_rejects_cross_currency():
     with pytest.raises(HTTPException) as exc_info:
         ensure_same_transfer_currency(
@@ -80,7 +93,17 @@ def test_transfer_currency_guard_rejects_cross_currency():
         )
 
     assert exc_info.value.status_code == 409
-    assert "Cross-currency transfers" in str(exc_info.value.detail)
+
+
+def test_transfer_currency_guard_rejects_same_unsupported_currency():
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_same_transfer_currency(
+            _account("USD"),
+            _account("USD"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "New money movements" in str(exc_info.value.detail)
 
 
 def test_transfer_currency_guard_accepts_same_currency():
