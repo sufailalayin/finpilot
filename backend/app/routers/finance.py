@@ -514,6 +514,16 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
     if "transaction_type" in values:
         values["transaction_type"] = TransactionType(values["transaction_type"].value)
     if "account_id" in values:
+        current_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == transaction.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if current_account is None:
+            raise HTTPException(status_code=404, detail="Current account not found")
+        ensure_supported_account_currency(current_account)
+
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
