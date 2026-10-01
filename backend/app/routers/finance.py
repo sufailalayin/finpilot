@@ -103,7 +103,11 @@ async def list_accounts(user: User = Depends(get_current_user), db: AsyncSession
 
 @router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_category(payload: CategoryCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> CategoryResponse:
-    category = Category(user_id=user.id, name=payload.name.strip(), transaction_type=payload.transaction_type)
+    category = Category(
+        user_id=user.id,
+        name=payload.name.strip(),
+        transaction_type=TransactionType(payload.transaction_type.value),
+    )
     db.add(category)
     await db.commit()
     await db.refresh(category)
