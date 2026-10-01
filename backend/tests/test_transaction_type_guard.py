@@ -1,19 +1,44 @@
+from datetime import date
+from uuid import uuid4
+
 import pytest
-from fastapi import HTTPException
+from pydantic import ValidationError
 
-from app.models.finance import TransactionType
-from app.routers.finance import _ensure_direct_transaction_type
-
-
-def test_direct_transaction_type_guard_accepts_income_and_expense():
-    _ensure_direct_transaction_type(TransactionType.INCOME)
-    _ensure_direct_transaction_type(TransactionType.EXPENSE)
-    _ensure_direct_transaction_type(None)
+from app.schemas.finance import TransactionCreate, TransactionUpdate
 
 
-def test_direct_transaction_type_guard_rejects_transfer():
-    with pytest.raises(HTTPException) as exc_info:
-        _ensure_direct_transaction_type(TransactionType.TRANSFER)
+def test_direct_transaction_schemas_accept_income_and_expense():
+    common = {
+        "account_id": uuid4(),
+        "category_id": None,
+        "amount": "10.00",
+        "occurred_on": date.today(),
+        "merchant": None,
+        "note": None,
+    }
 
-    assert exc_info.value.status_code == 400
-    assert "/finance/transfers" in str(exc_info.value.detail)
+    assert (
+        TransactionCreate(transaction_type="income", **common).transaction_type.value
+        == "income"
+    )
+    assert (
+        TransactionCreate(transaction_type="expense", **common).transaction_type.value
+        == "expense"
+    )
+
+
+def test_direct_transaction_schemas_reject_transfer():
+    common = {
+        "account_id": uuid4(),
+        "category_id": None,
+        "amount": "10.00",
+        "occurred_on": date.today(),
+        "merchant": None,
+        "note": None,
+    }
+
+    with pytest.raises(ValidationError):
+        TransactionCreate(transaction_type="transfer", **common)
+
+    with pytest.raises(ValidationError):
+        TransactionUpdate(transaction_type="transfer")
