@@ -3,12 +3,13 @@ import inspect
 import pytest
 from pydantic import ValidationError
 
-from app.routers.finance import net_worth_summary, remediate_account_currency, update_account
+from app.routers.finance import net_worth_summary, remediate_account_currency, update_account, update_transaction
 from app.routers.liabilities import debt_overview
 from app.routers.planning import budget_dashboard
 from app.schemas.finance import AccountCurrencyRemediation
 from app.services.analytics import build_analytics, build_report
 from app.services.dashboard import build_dashboard
+from app.services.ai_context import build_finance_context
 
 
 def _source(function) -> str:
@@ -65,3 +66,18 @@ def test_archived_account_update_is_read_only_except_name():
     assert "Archived legacy accounts are read-only" in source
     assert '"opening_balance" in values' in source
     assert "ensure_supported_account_currency" in source
+
+
+
+def test_transaction_reassignment_validates_current_account_before_destination():
+    source = _source(update_transaction)
+    assert "current_account = await db.scalar" in source
+    assert "FinanceAccount.id == transaction.account_id" in source
+    assert "ensure_supported_account_currency(current_account)" in source
+
+
+def test_ai_context_quarantines_archived_accounts():
+    source = _source(build_finance_context)
+    assert "ensure_user_finance_currency" in source
+    assert source.count("active_finance_account_ids") >= 4
+    assert "FinanceAccount.is_archived.is_(False)" in source
