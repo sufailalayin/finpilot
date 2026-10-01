@@ -169,7 +169,7 @@ async def test_health_score_waits_for_income_instead_of_rating_expense_only_data
         assert data["health_grade"] == "Not enough data"
 
 @pytest.mark.asyncio
-async def test_internal_transfer_marker_survives_merchant_edit_and_real_transfer_label_counts():
+async def test_internal_transfer_rows_are_protected_and_real_transfer_label_counts():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         headers = await _register(client, "transfer-marker")
@@ -228,14 +228,25 @@ async def test_internal_transfer_marker_survives_merchant_edit_and_real_transfer
             },
         )
         assert transfer.status_code == 201, transfer.text
+        transfer_data = transfer.json()
+        assert transfer_data["outgoing"]["is_internal_transfer"] is True
+        assert transfer_data["incoming"]["is_internal_transfer"] is True
 
-        outgoing_id = transfer.json()["outgoing"]["id"]
+        outgoing_id = transfer_data["outgoing"]["id"]
+        incoming_id = transfer_data["incoming"]["id"]
+
         edited = await client.patch(
             f"/api/v1/finance/transactions/{outgoing_id}",
             headers=headers,
             json={"merchant": "Edited transfer label"},
         )
-        assert edited.status_code == 200, edited.text
+        assert edited.status_code == 409, edited.text
+
+        deleted = await client.delete(
+            f"/api/v1/finance/transactions/{incoming_id}",
+            headers=headers,
+        )
+        assert deleted.status_code == 409, deleted.text
 
         real_expense = await client.post(
             "/api/v1/finance/transactions",
@@ -251,6 +262,7 @@ async def test_internal_transfer_marker_survives_merchant_edit_and_real_transfer
             },
         )
         assert real_expense.status_code == 201, real_expense.text
+        assert real_expense.json()["is_internal_transfer"] is False
 
         dashboard = await client.get("/api/v1/dashboard", headers=headers)
         assert dashboard.status_code == 200, dashboard.text

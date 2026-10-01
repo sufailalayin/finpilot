@@ -161,6 +161,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     final amount =
                         double.tryParse(item['amount'].toString()) ?? 0;
                     final title = item['merchant']?.toString().trim();
+                    final isInternalTransfer =
+                        item['is_internal_transfer'] == true;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
@@ -223,7 +225,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                   fontSize: 15,
                                 ),
                               ),
-                              PopupMenuButton<String>(
+                              if (isInternalTransfer)
+                                const Tooltip(
+                                  message:
+                                      'Internal transfer rows are protected',
+                                  child: Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Icon(Icons.lock_outline_rounded),
+                                  ),
+                                )
+                              else
+                                PopupMenuButton<String>(
                                 tooltip: 'Transaction actions',
                                 onSelected: (action) async {
                                   if (action == 'edit') {

@@ -137,6 +137,11 @@ async def delete_transaction(transaction_id: uuid.UUID, user: User = Depends(get
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.user_id == user.id))
     if transaction is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    if transaction.is_internal_transfer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Internal transfer rows cannot be deleted individually",
+        )
     await db.delete(transaction)
     await db.commit()
 
@@ -304,6 +309,11 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.user_id == user.id))
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    if transaction.is_internal_transfer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Internal transfer rows cannot be edited individually",
+        )
     values = payload.model_dump(exclude_unset=True)
     if "account_id" in values:
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
