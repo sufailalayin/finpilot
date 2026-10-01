@@ -311,7 +311,15 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
     )
 
     health = await build_analytics(db, user_id)
-    asset_total = sum((row.current_value for row in assets), Decimal("0.00"))
+    asset_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Asset.current_value),
+                Decimal("0.00"),
+            )
+        ).where(Asset.user_id == user_id)
+    )
+    asset_total = asset_total or Decimal("0.00")
     receivables_total = await db.scalar(
         select(
             func.coalesce(
@@ -324,10 +332,15 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         )
     )
     receivables_total = receivables_total or Decimal("0.00")
-    debt_total = sum(
-        (row.outstanding_principal for row in liabilities),
-        Decimal("0.00"),
+    debt_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Liability.outstanding_principal),
+                Decimal("0.00"),
+            )
+        ).where(Liability.user_id == user_id)
     )
+    debt_total = debt_total or Decimal("0.00")
     total_liabilities = debt_total + card_liabilities
 
     return {
