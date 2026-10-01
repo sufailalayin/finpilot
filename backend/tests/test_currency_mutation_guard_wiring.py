@@ -1,7 +1,7 @@
 import inspect
 
 from app.routers.finance import create_transaction, update_transaction
-from app.routers.liabilities import create_liability, record_payment, update_liability
+from app.routers.liabilities import create_liability, debt_overview, record_payment, update_liability
 from app.routers.receivables import create_movement, create_receivable, record_repayment
 
 
@@ -24,3 +24,7 @@ def test_liability_mutations_apply_supported_account_currency_guard():
     assert "ensure_supported_account_currency" in _source(create_liability)
     assert "ensure_supported_account_currency" in _source(update_liability)
     assert "ensure_supported_account_currency" in _source(record_payment)
+
+
+def test_debt_overview_applies_user_currency_guard():
+    assert "ensure_user_finance_currency" in _source(debt_overview)
