@@ -87,6 +87,16 @@ async def update_recurring(
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
         ensure_supported_account_currency(account)
+    elif values.get("is_active") is True:
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == rule.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
 
     tx_type = values.get("transaction_type", rule.transaction_type)
     if tx_type not in {"income", "expense"}:
