@@ -31,7 +31,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   final _money = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
-    decimalDigits: 0,
+    decimalDigits: 2,
   );
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;

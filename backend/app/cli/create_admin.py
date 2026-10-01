@@ -2,17 +2,23 @@ import argparse
 import asyncio
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
-from app.models.user import User, UserStatus
+from app.models.user import EntitlementStatus, PlanCode, User, UserStatus
+from app.services.subscriptions import ensure_user_entitlement
 
 
 async def create_admin(email: str, password: str, full_name: str | None) -> None:
     normalized_email = email.strip().lower()
 
     async with AsyncSessionLocal() as db:
-        existing = await db.scalar(select(User).where(User.email == normalized_email))
+        existing = await db.scalar(
+            select(User)
+            .options(selectinload(User.entitlement))
+            .where(User.email == normalized_email)
+        )
 
         if existing is None:
             user = User(
@@ -24,6 +30,11 @@ async def create_admin(email: str, password: str, full_name: str | None) -> None
                 status=UserStatus.ACTIVE,
             )
             db.add(user)
+            entitlement = ensure_user_entitlement(user)
+            entitlement.plan_code = PlanCode.PRO
+            entitlement.status = EntitlementStatus.ACTIVE
+            entitlement.trial_started_at = None
+            entitlement.trial_ends_at = None
             await db.commit()
             print("ADMIN CREATED:", normalized_email)
             return
@@ -38,6 +49,13 @@ async def create_admin(email: str, password: str, full_name: str | None) -> None
         if password:
             existing.password_hash = hash_password(password)
             existing.token_version += 1
+
+        entitlement = ensure_user_entitlement(existing)
+        entitlement.plan_code = PlanCode.PRO
+        entitlement.status = EntitlementStatus.ACTIVE
+        entitlement.trial_started_at = None
+        entitlement.trial_ends_at = None
+
         await db.commit()
         print("ADMIN UPDATED:", normalized_email)
 

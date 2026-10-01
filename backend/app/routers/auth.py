@@ -253,11 +253,12 @@ async def verify_register_otp(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(
+async def _password_login(
     payload: LoginRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession,
+    *,
+    admin_portal: bool,
 ) -> TokenResponse:
     email = payload.email.lower().strip()
     result = await db.execute(
@@ -316,6 +317,18 @@ async def login(
             detail="Email verification required",
         )
 
+    if admin_portal:
+        if not user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Administrator access required",
+            )
+    elif user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
+
     clear_login_failures(user)
 
     if user.entitlement is not None:
@@ -342,6 +355,15 @@ async def login(
     )
     await db.commit()
 
+    if admin_portal:
+        return TokenResponse(
+            access_token=create_access_token(
+                str(user.id),
+                user.token_version,
+            ),
+            user=UserResponse.model_validate(user),
+        )
+
     _, refresh_token = await issue_refresh_session(db, user=user)
     await db.commit()
 
@@ -352,6 +374,34 @@ async def login(
         ),
         refresh_token=refresh_token,
         user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    payload: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    return await _password_login(
+        payload,
+        request,
+        db,
+        admin_portal=False,
+    )
+
+
+@router.post("/admin/login", response_model=TokenResponse)
+async def admin_login(
+    payload: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    return await _password_login(
+        payload,
+        request,
+        db,
+        admin_portal=True,
     )
 
 
@@ -469,6 +519,14 @@ async def refresh_session(
         )
 
     user, new_refresh_token = rotated
+    if user.is_admin:
+        await revoke_all_refresh_sessions(db, user_id=user.id)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
+
     await db.commit()
     return TokenResponse(
         access_token=create_access_token(

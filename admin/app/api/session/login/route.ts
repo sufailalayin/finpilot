@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const response = await fetch(base + "/auth/login", {
+  const response = await fetch(base + "/auth/admin/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body,

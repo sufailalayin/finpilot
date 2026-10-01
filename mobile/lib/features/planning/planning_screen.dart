@@ -25,7 +25,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
   late Future<List<dynamic>> _goals;
   late Future<List<dynamic>> _budgets;
 
-  final _money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+  final _money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 
   @override
   void initState() {
@@ -54,8 +54,8 @@ class _PlanningScreenState extends State<PlanningScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: name, decoration: const InputDecoration(labelText: 'Goal name')),
-            TextField(controller: target, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target amount')),
-            TextField(controller: current, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Already saved')),
+            TextField(controller: target, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target amount')),
+            TextField(controller: current, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Already saved')),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: goalType,
@@ -145,7 +145,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: name, decoration: const InputDecoration(labelText: 'Budget name')),
-            TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Budget amount')),
+            TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Budget amount')),
           ],
         ),
         actions: [

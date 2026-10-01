@@ -21,7 +21,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
   final _money = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
-    decimalDigits: 0,
+    decimalDigits: 2,
   );
 
   @override

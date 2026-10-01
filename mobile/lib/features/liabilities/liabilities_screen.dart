@@ -21,7 +21,7 @@ class _LiabilitiesScreenState extends State<LiabilitiesScreen> {
   final _money = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
-    decimalDigits: 0,
+    decimalDigits: 2,
   );
 
   @override
