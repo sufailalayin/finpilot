@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.security import decode_access_token_claims
 from app.db.session import get_db
 from app.models.user import EntitlementStatus, User, UserStatus
-from app.services.subscriptions import normalize_paid_entitlement
+from app.services.subscriptions import ensure_user_entitlement, normalize_paid_entitlement
 from app.services.trials import normalize_entitlement
 
 bearer = HTTPBearer(auto_error=False)
@@ -45,6 +45,15 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
 
     path = request.url.path
+    admin_surface = (
+        path.startswith("/api/v1/admin")
+        or path.startswith("/api/v1/auth/admin")
+    )
+    if user.is_admin and not admin_surface:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts must use the administrator portal",
+        )
     access_exempt = (
         path.startswith("/api/v1/subscriptions/status")
         or path.startswith("/api/v1/subscriptions/plans")
@@ -56,6 +65,10 @@ async def get_current_user(
     )
 
     entitlement = user.entitlement
+    if entitlement is None:
+        entitlement = ensure_user_entitlement(user)
+        await db.commit()
+
     if entitlement is not None:
         previous_status = entitlement.status
         previous_plan = entitlement.plan_code
@@ -79,10 +92,4 @@ async def get_current_user(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail="FinPilot trial or subscription has ended",
             )
-    elif not user.is_admin and not access_exempt:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="FinPilot access entitlement is unavailable",
-        )
-
     return user

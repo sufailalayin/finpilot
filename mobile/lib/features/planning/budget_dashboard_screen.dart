@@ -16,7 +16,7 @@ class BudgetDashboardScreen extends StatefulWidget {
 class _BudgetDashboardScreenState extends State<BudgetDashboardScreen> {
   late final PlanningService _planning = PlanningService(widget.api);
   late Future<Map<String, dynamic>> _future;
-  final _money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+  final _money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 
   @override
   void initState() {

@@ -141,9 +141,21 @@ flutter build appbundle --release --dart-define=FINPILOT_API_BASE_URL="$FINPILOT
 APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
 "$APKSIGNER" verify --verbose build/app/outputs/flutter-apk/app-release.apk
 
-cp build/app/outputs/flutter-apk/app-release.apk "$OUT_DIR/FinPilot-1.1.2-build4-production.apk"
-cp build/app/outputs/bundle/release/app-release.aab "$OUT_DIR/FinPilot-1.1.2-build4-production.aab"
-sha256sum "$OUT_DIR/FinPilot-1.1.2-build4-production.apk" "$OUT_DIR/FinPilot-1.1.2-build4-production.aab" > "$OUT_DIR/SHA256SUMS.txt"
+VERSION="$(awk '/^version:/ {print $2}' /src/pubspec.yaml)"
+VERSION_NAME="${VERSION%%+*}"
+VERSION_CODE="${VERSION##*+}"
+APK_NAME="FinPilot-${VERSION_NAME}-build${VERSION_CODE}-production.apk"
+AAB_NAME="FinPilot-${VERSION_NAME}-build${VERSION_CODE}-production.aab"
+
+cp build/app/outputs/flutter-apk/app-release.apk "$OUT_DIR/$APK_NAME"
+cp build/app/outputs/bundle/release/app-release.aab "$OUT_DIR/$AAB_NAME"
+sha256sum "$OUT_DIR/$APK_NAME" "$OUT_DIR/$AAB_NAME" > "$OUT_DIR/SHA256SUMS.txt"
+
+cat > "$OUT_DIR/BUILD_INFO.txt" <<EOF
+version_name=$VERSION_NAME
+version_code=$VERSION_CODE
+api_base_url=$FINPILOT_API_BASE_URL
+EOF
 
 cd "$OUT_DIR"
 python3 -m http.server "${PORT:-8080}" --bind 0.0.0.0

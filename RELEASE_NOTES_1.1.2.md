@@ -8,3 +8,5 @@ Highlights:
 - Admin Railway proxy login fix
 - Reliable admin bootstrap
 - Production Android signing workflow
+
+- Production signing configuration ready for fresh release run.
