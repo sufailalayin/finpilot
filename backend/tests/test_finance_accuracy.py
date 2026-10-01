@@ -169,7 +169,7 @@ async def test_health_score_waits_for_income_instead_of_rating_expense_only_data
         assert data["health_grade"] == "Not enough data"
 
 @pytest.mark.asyncio
-async def test_internal_transfer_marker_survives_merchant_edit_and_real_transfer_label_counts():
+async def test_internal_transfer_rows_are_protected_and_real_transfer_label_counts():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         headers = await _register(client, "transfer-marker")
