@@ -85,6 +85,12 @@ async def list_categories(user: User = Depends(get_current_user), db: AsyncSessi
 
 @router.post("/transactions", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
 async def create_transaction(payload: TransactionCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> TransactionResponse:
+    if payload.transaction_type == TransactionType.TRANSFER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use /finance/transfers for account-to-account transfers",
+        )
+
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == payload.account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
@@ -315,6 +321,11 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
             detail="Internal transfer rows cannot be edited individually",
         )
     values = payload.model_dump(exclude_unset=True)
+    if values.get("transaction_type") == TransactionType.TRANSFER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use /finance/transfers for account-to-account transfers",
+        )
     if "account_id" in values:
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
