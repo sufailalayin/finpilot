@@ -91,6 +91,47 @@ async def _account_historical_activity_count(
     )
 
 
+async def _account_archive_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    internal_transfer_count = await db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account_id,
+            Transaction.is_internal_transfer.is_(True),
+        )
+    )
+    receivable_movement_count = await db.scalar(
+        select(func.count()).select_from(ReceivableMovement).where(
+            ReceivableMovement.user_id == user_id,
+            or_(
+                ReceivableMovement.source_account_id == account_id,
+                ReceivableMovement.destination_account_id == account_id,
+            ),
+        )
+    )
+    liability_funding_count = await db.scalar(
+        select(func.count()).select_from(Liability).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account_id,
+        )
+    )
+    liability_payment_count = await db.scalar(
+        select(func.count()).select_from(LiabilityPayment).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account_id,
+        )
+    )
+    return int(
+        (internal_transfer_count or 0)
+        + (receivable_movement_count or 0)
+        + (liability_funding_count or 0)
+        + (liability_payment_count or 0)
+    )
+
+
 DEFAULT_CATEGORIES = {
     "expense": [
         "Food & Dining",
@@ -415,6 +456,19 @@ async def remediate_account_currency(
         account.currency = "INR"
         account.is_archived = False
     else:
+        archive_blocker_count = await _account_archive_blocker_count(
+            db,
+            user.id,
+            account.id,
+        )
+        if archive_blocker_count:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This account has linked transfer, receivable, or liability history. "
+                    "Automatic archive is blocked to avoid corrupting linked records."
+                ),
+            )
         account.is_archived = True
 
     await db.commit()
@@ -582,7 +636,10 @@ async def net_worth_summary(
     accounts = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+                select(FinanceAccount).where(
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                )
             )
         ).scalars().all()
     )
