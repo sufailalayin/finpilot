@@ -44,6 +44,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
             ).where(
                 Transaction.user_id == user_id,
                 Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.is_internal_transfer.is_(False),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
             )
@@ -59,6 +60,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         .where(
             Transaction.user_id == user_id,
             Transaction.account_id.in_(active_finance_account_ids(user_id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
@@ -225,6 +227,7 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 .where(
                     Transaction.user_id == user_id,
                     Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                    Transaction.is_internal_transfer.is_(False),
                 )
                 .order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc())
                 .limit(20)
