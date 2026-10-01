@@ -71,3 +71,19 @@ async def test_customer_and_admin_login_surfaces_are_separated():
         )
         assert admin_portal_login.status_code == 200, admin_portal_login.text
         assert admin_portal_login.json()["user"]["is_admin"] is True
+
+        admin_payload = admin_portal_login.json()
+        assert admin_payload["refresh_token"] is None
+
+        admin_headers = {
+            "Authorization": f"Bearer {admin_payload['access_token']}"
+        }
+        app_me = await client.get(
+            "/api/v1/auth/me",
+            headers=admin_headers,
+        )
+        assert app_me.status_code == 403, app_me.text
+        assert (
+            app_me.json()["detail"]
+            == "Administrator accounts must use the administrator portal"
+        )
