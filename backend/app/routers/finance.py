@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -13,7 +13,7 @@ from app.models.finance import Category, FinanceAccount, Transaction, Transactio
 from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
-from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
+from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountCurrencyRemediation, AccountCurrencyRemediationResponse, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, CurrencyRemediationMode, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
 from app.services.finance_currency import ensure_same_transfer_currency, ensure_supported_account_currency, ensure_user_finance_currency
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -49,6 +49,46 @@ async def _load_transaction_category(
         )
     _ensure_category_type(category, transaction_type)
     return category
+
+
+async def _account_historical_activity_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    transaction_count = await db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account_id,
+        )
+    )
+    receivable_movement_count = await db.scalar(
+        select(func.count()).select_from(ReceivableMovement).where(
+            ReceivableMovement.user_id == user_id,
+            or_(
+                ReceivableMovement.source_account_id == account_id,
+                ReceivableMovement.destination_account_id == account_id,
+            ),
+        )
+    )
+    liability_funding_count = await db.scalar(
+        select(func.count()).select_from(Liability).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account_id,
+        )
+    )
+    liability_payment_count = await db.scalar(
+        select(func.count()).select_from(LiabilityPayment).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account_id,
+        )
+    )
+    return int(
+        (transaction_count or 0)
+        + (receivable_movement_count or 0)
+        + (liability_funding_count or 0)
+        + (liability_payment_count or 0)
+    )
 
 
 DEFAULT_CATEGORIES = {
@@ -308,6 +348,7 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
             name=account.name,
             account_type=account.account_type,
             currency=account.currency,
+            is_archived=account.is_archived,
             opening_balance=account.opening_balance,
             current_balance=current_balance,
             credit_limit=account.credit_limit,
@@ -333,6 +374,56 @@ async def update_account(account_id: uuid.UUID, payload: AccountUpdate, user: Us
     await db.commit()
     await db.refresh(account)
     return AccountResponse.model_validate(account)
+
+
+@router.post(
+    "/accounts/{account_id}/currency-remediation",
+    response_model=AccountCurrencyRemediationResponse,
+)
+async def remediate_account_currency(
+    account_id: uuid.UUID,
+    payload: AccountCurrencyRemediation,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AccountCurrencyRemediationResponse:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.currency.strip().upper() == "INR":
+        raise HTTPException(status_code=409, detail="Account already uses INR")
+
+    historical_activity_count = await _account_historical_activity_count(
+        db,
+        user.id,
+        account.id,
+    )
+
+    if payload.mode == CurrencyRemediationMode.METADATA_CORRECTION:
+        if historical_activity_count or account.opening_balance != Decimal("0.00"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Metadata correction is only allowed for an unused zero-balance account. "
+                    "Archive this legacy account instead."
+                ),
+            )
+        account.currency = "INR"
+        account.is_archived = False
+    else:
+        account.is_archived = True
+
+    await db.commit()
+    await db.refresh(account)
+    return AccountCurrencyRemediationResponse(
+        account=AccountResponse.model_validate(account),
+        action=payload.mode,
+        historical_activity_count=historical_activity_count,
+    )
 
 
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
