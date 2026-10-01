@@ -14,7 +14,7 @@ from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.receivable import ReceivableMovement
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
-from app.services.finance_currency import ensure_supported_account_currency
+from app.services.finance_currency import ensure_supported_account_currency, ensure_user_finance_currency
 from app.schemas.liability import (
     DebtOverview,
     LiabilityCreate,
@@ -240,6 +240,7 @@ async def debt_overview(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> DebtOverview:
+    await ensure_user_finance_currency(db, user.id)
     liabilities = list(
         (
             await db.execute(
