@@ -32,6 +32,17 @@ def ensure_supported_currencies(currencies: Iterable[str]) -> None:
         )
 
 
+def ensure_supported_account_currency(account: FinanceAccount) -> None:
+    if normalize_currency(account.currency) != SUPPORTED_FINANCE_CURRENCY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "New money movements are only supported for INR accounts. "
+                "Convert or remove the legacy account before recording new activity."
+            ),
+        )
+
+
 async def ensure_user_finance_currency(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -46,6 +57,8 @@ def ensure_same_transfer_currency(
     from_account: FinanceAccount,
     to_account: FinanceAccount,
 ) -> None:
+    ensure_supported_account_currency(from_account)
+    ensure_supported_account_currency(to_account)
     if normalize_currency(from_account.currency) != normalize_currency(to_account.currency):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
