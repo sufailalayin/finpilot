@@ -2,8 +2,9 @@ import enum
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.finance import AccountType, TransactionType
 
@@ -16,12 +17,17 @@ class DirectTransactionType(str, enum.Enum):
 class AccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     account_type: AccountType
-    currency: str = Field(default="INR", min_length=3, max_length=3)
+    currency: Literal["INR"] = "INR"
     opening_balance: Decimal = Decimal("0.00")
     credit_limit: Decimal | None = Field(default=None, ge=0)
     card_last4: str | None = Field(default=None, min_length=4, max_length=4, pattern=r"^\d{4}$")
     statement_day: int | None = Field(default=None, ge=1, le=31)
     payment_due_day: int | None = Field(default=None, ge=1, le=31)
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def normalize_currency(cls, value):
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 class AccountUpdate(BaseModel):
@@ -50,8 +56,16 @@ class AccountBalanceResponse(BaseModel):
     created_at: datetime
 
 
-class AccountResponse(AccountCreate):
+class AccountResponse(BaseModel):
     id: uuid.UUID
+    name: str
+    account_type: AccountType
+    currency: str
+    opening_balance: Decimal
+    credit_limit: Decimal | None = None
+    card_last4: str | None = None
+    statement_day: int | None = None
+    payment_due_day: int | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 
