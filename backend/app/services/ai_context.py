@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.automation import BillReminder, RecurringRule
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import ReceivableMovement
 from app.services.analytics import build_analytics
 from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
@@ -18,6 +19,20 @@ def _ai_account_balance(account: FinanceAccount, movement: Decimal) -> tuple[Dec
     if account.account_type.value == "card":
         return max(account.opening_balance - movement, Decimal("0.00")), True
     return account.opening_balance + movement, False
+
+
+def _ai_account_movement(
+    transaction_movement: Decimal,
+    receivable_movement: Decimal,
+    liability_inflow: Decimal,
+    liability_outflow: Decimal,
+) -> Decimal:
+    return (
+        transaction_movement
+        + receivable_movement
+        + liability_inflow
+        - liability_outflow
+    )
 
 
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
@@ -110,9 +125,45 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 Transaction.account_id == account.id,
             )
         )
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user_id)
+        )
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user_id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user_id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        total_movement = _ai_account_movement(
+            movement or Decimal("0.00"),
+            receivable_movement or Decimal("0.00"),
+            liability_inflow or Decimal("0.00"),
+            liability_outflow or Decimal("0.00"),
+        )
         current_balance, is_card_liability = _ai_account_balance(
             account,
-            movement or Decimal("0.00"),
+            total_movement,
         )
         if is_card_liability:
             card_liabilities += current_balance
