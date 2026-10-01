@@ -14,6 +14,7 @@ from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
 from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
+from app.services.finance_currency import ensure_same_transfer_currency, ensure_user_finance_currency
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -399,6 +400,11 @@ async def create_transfer(payload: TransferCreate, user: User = Depends(get_curr
     ))).scalars().all())
     if len(accounts) != 2:
         raise HTTPException(status_code=404, detail="Transfer account not found")
+    accounts_by_id = {account.id: account for account in accounts}
+    ensure_same_transfer_currency(
+        accounts_by_id[payload.from_account_id],
+        accounts_by_id[payload.to_account_id],
+    )
 
     outgoing = Transaction(
         user_id=user.id,
@@ -469,6 +475,7 @@ async def net_worth_summary(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> NetWorthResponse:
+    await ensure_user_finance_currency(db, user.id)
     accounts = list(
         (
             await db.execute(
