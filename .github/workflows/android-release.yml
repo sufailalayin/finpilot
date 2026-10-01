@@ -24,6 +24,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
         startsWith(github.event.workflow_run.head_commit.message, 'release:')
       )
     runs-on: ubuntu-latest
@@ -55,6 +56,7 @@ jobs:
           test -n "$CODE"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Select signing source
         id: signing
@@ -358,3 +360,88 @@ jobs:
             /tmp/railway-signed/FinPilot-${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}-production.aab
             /tmp/railway-signed/SHA256SUMS.txt
             /tmp/railway-signed/BUILD_INFO.txt
+
+
+      - name: Prepare durable GitHub release assets
+        id: durable_release
+        env:
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          API_BASE_URL: ${{ vars.FINPILOT_API_BASE_URL || 'https://finpilot-backend-production-eaf5.up.railway.app/api/v1' }}
+        run: |
+          set -euo pipefail
+          OUT=/tmp/durable-release
+          mkdir -p "$OUT"
+
+          APK="FinPilot-$VERSION_NAME-build$VERSION_CODE-production.apk"
+          AAB="FinPilot-$VERSION_NAME-build$VERSION_CODE-production.aab"
+
+          if [ "$SIGNING_MODE" = "github" ]; then
+            cp /tmp/finpilot_release/build/app/outputs/flutter-apk/app-release.apk "$OUT/$APK"
+            cp /tmp/finpilot_release/build/app/outputs/bundle/release/app-release.aab "$OUT/$AAB"
+          else
+            cp "/tmp/railway-signed/$APK" "$OUT/$APK"
+            cp "/tmp/railway-signed/$AAB" "$OUT/$AAB"
+          fi
+
+          (
+            cd "$OUT"
+            sha256sum "$APK" "$AAB" > SHA256SUMS.txt
+          )
+
+          cat > "$OUT/BUILD_INFO.txt" <<EOF
+          version_name=$VERSION_NAME
+          version_code=$VERSION_CODE
+          api_base_url=$API_BASE_URL
+          EOF
+
+          echo "tag=v$VERSION_NAME-build$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "aab=$AAB" >> "$GITHUB_OUTPUT"
+
+      - name: Publish durable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          RELEASE_SHA: ${{ steps.version.outputs.sha }}
+          RELEASE_TAG: ${{ steps.durable_release.outputs.tag }}
+          APK: ${{ steps.durable_release.outputs.apk }}
+          AAB: ${{ steps.durable_release.outputs.aab }}
+        run: |
+          set -euo pipefail
+          OUT=/tmp/durable-release
+          NOTES_FILE="RELEASE_NOTES_$VERSION_NAME.md"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              "$OUT/$APK" \
+              "$OUT/$AAB" \
+              "$OUT/SHA256SUMS.txt" \
+              "$OUT/BUILD_INFO.txt" \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            if [ -f "$NOTES_FILE" ]; then
+              gh release create "$RELEASE_TAG" \
+                "$OUT/$APK" \
+                "$OUT/$AAB" \
+                "$OUT/SHA256SUMS.txt" \
+                "$OUT/BUILD_INFO.txt" \
+                --target "$RELEASE_SHA" \
+                --title "FinPilot $VERSION_NAME build $VERSION_CODE" \
+                --notes-file "$NOTES_FILE" \
+                --repo "$GITHUB_REPOSITORY"
+            else
+              gh release create "$RELEASE_TAG" \
+                "$OUT/$APK" \
+                "$OUT/$AAB" \
+                "$OUT/SHA256SUMS.txt" \
+                "$OUT/BUILD_INFO.txt" \
+                --target "$RELEASE_SHA" \
+                --title "FinPilot $VERSION_NAME build $VERSION_CODE" \
+                --notes "FinPilot $VERSION_NAME build $VERSION_CODE" \
+                --repo "$GITHUB_REPOSITORY"
+            fi
+          fi
