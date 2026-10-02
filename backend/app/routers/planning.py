@@ -30,6 +30,14 @@ from app.schemas.planning import (
 router = APIRouter(prefix="/planning", tags=["planning"])
 
 
+def _ensure_budget_category_type(category: Category) -> None:
+    if category.transaction_type != TransactionType.EXPENSE:
+        raise HTTPException(
+            status_code=400,
+            detail="Budget category must be an expense category",
+        )
+
+
 async def _load_owned_expense_category(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -43,11 +51,7 @@ async def _load_owned_expense_category(
     )
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
-    if category.transaction_type != TransactionType.EXPENSE:
-        raise HTTPException(
-            status_code=400,
-            detail="Budget category must be an expense category",
-        )
+    _ensure_budget_category_type(category)
     return category
 
 
