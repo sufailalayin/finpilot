@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.asset import Asset
+from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
@@ -129,6 +130,35 @@ async def _account_archive_blocker_count(
         + (receivable_movement_count or 0)
         + (liability_funding_count or 0)
         + (liability_payment_count or 0)
+    )
+
+
+async def _account_delete_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    historical_count = await _account_historical_activity_count(
+        db,
+        user_id,
+        account_id,
+    )
+    recurring_count = await db.scalar(
+        select(func.count()).select_from(RecurringRule).where(
+            RecurringRule.user_id == user_id,
+            RecurringRule.account_id == account_id,
+        )
+    )
+    bill_count = await db.scalar(
+        select(func.count()).select_from(BillReminder).where(
+            BillReminder.user_id == user_id,
+            BillReminder.account_id == account_id,
+        )
+    )
+    return int(
+        historical_count
+        + (recurring_count or 0)
+        + (bill_count or 0)
     )
 
 
@@ -493,9 +523,18 @@ async def delete_account(account_id: uuid.UUID, user: User = Depends(get_current
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    count = await db.scalar(select(func.count()).select_from(Transaction).where(Transaction.account_id == account.id))
-    if count:
-        raise HTTPException(status_code=409, detail="Account has transactions and cannot be deleted")
+    blocker_count = await _account_delete_blocker_count(
+        db,
+        user.id,
+        account.id,
+    )
+    if blocker_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Account has linked financial history or automation and cannot be deleted"
+            ),
+        )
     await db.delete(account)
     await db.commit()
 
