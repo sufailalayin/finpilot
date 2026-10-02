@@ -293,6 +293,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 : const Icon(Icons.chevron_right),
             onTap: _checkingUpdate ? null : _checkForUpdates,
           ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy Policy'),
+            subtitle: const Text('Read the FinPilot privacy policy'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () async {
+              final uri = Uri.parse(
+                'https://finpilot-admin-production.up.railway.app/privacy',
+              );
+              final opened = await launchUrl(
+                uri,
+                mode: LaunchMode.externalApplication,
+              );
+              if (!opened && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Unable to open the privacy policy.'),
+                  ),
+                );
+              }
+            },
+          ),
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('About'),
