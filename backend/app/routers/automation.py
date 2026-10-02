@@ -11,11 +11,11 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
 from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
-from app.models.receivable import Receivable
+from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
-from app.services.finance_currency import ensure_supported_account_currency
+from app.services.finance_currency import active_finance_account_ids, ensure_supported_account_currency, ensure_user_finance_currency
 from app.schemas.automation import (
     AutomationOverview,
     AlertOverview,
@@ -316,6 +316,20 @@ async def mark_bill_paid(
     return BillResponse.model_validate(bill)
 
 
+def _automation_account_movement(
+    transaction_movement: Decimal,
+    receivable_movement: Decimal,
+    liability_inflow: Decimal,
+    liability_outflow: Decimal,
+) -> Decimal:
+    return (
+        transaction_movement
+        + receivable_movement
+        + liability_inflow
+        - liability_outflow
+    )
+
+
 def _occurrences_within_30d(rule: RecurringRule, today: date) -> int:
     end = today + timedelta(days=30)
     if not rule.is_active or rule.next_due_on > end:
@@ -393,6 +407,7 @@ async def smart_alerts(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AlertOverview:
+    await ensure_user_finance_currency(db, user.id)
     today = date.today()
     horizon = today + timedelta(days=30)
     bills = list(
@@ -543,6 +558,8 @@ async def smart_alerts(
     for budget in budgets:
         filters = [
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= today,
@@ -635,6 +652,8 @@ async def smart_alerts(
     month_expense = await db.scalar(
         select(func.coalesce(func.sum(Transaction.amount), Decimal("0.00"))).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= month_start,
             Transaction.occurred_on <= today,
@@ -647,12 +666,18 @@ async def smart_alerts(
     accounts = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+                select(FinanceAccount).where(
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                )
             )
         ).scalars().all()
     )
     total_liquid = Decimal("0.00")
     for account in accounts:
+        if account.account_type.value == "card":
+            continue
+
         movement = await db.scalar(
             select(
                 func.coalesce(
@@ -667,10 +692,47 @@ async def smart_alerts(
                 )
             ).where(
                 Transaction.user_id == user.id,
+                Transaction.account_id.in_(active_finance_account_ids(user.id)),
                 Transaction.account_id == account.id,
             )
         )
-        total_liquid += account.opening_balance + (movement or Decimal("0.00"))
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user.id)
+        )
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user.id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user.id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        total_movement = _automation_account_movement(
+            movement or Decimal("0.00"),
+            receivable_movement or Decimal("0.00"),
+            liability_inflow or Decimal("0.00"),
+            liability_outflow or Decimal("0.00"),
+        )
+        total_liquid += account.opening_balance + total_movement
 
     if avg_daily_expense > 0:
         runway_days = float(total_liquid / avg_daily_expense)
@@ -688,6 +750,8 @@ async def smart_alerts(
     average_transaction = await db.scalar(
         select(func.avg(Transaction.amount)).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= month_start,
             Transaction.occurred_on <= today,
@@ -700,6 +764,8 @@ async def smart_alerts(
                     select(Transaction)
                     .where(
                         Transaction.user_id == user.id,
+                        Transaction.account_id.in_(active_finance_account_ids(user.id)),
+                        Transaction.is_internal_transfer.is_(False),
                         Transaction.transaction_type == TransactionType.EXPENSE,
                         Transaction.occurred_on >= today - timedelta(days=3),
                         Transaction.amount >= Decimal(str(average_transaction)) * Decimal("2.5"),
