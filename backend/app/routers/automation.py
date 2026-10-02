@@ -15,6 +15,7 @@ from app.models.liability import Liability
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable
 from app.models.user import User
+from app.services.finance_currency import ensure_supported_account_currency
 from app.schemas.automation import (
     AutomationOverview,
     AlertOverview,
@@ -45,6 +46,7 @@ async def create_recurring(
     )
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
+    ensure_supported_account_currency(account)
 
     if payload.transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
@@ -84,6 +86,17 @@ async def update_recurring(
         )
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
+    elif values.get("is_active") is True:
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == rule.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
 
     tx_type = values.get("transaction_type", rule.transaction_type)
     if tx_type not in {"income", "expense"}:
@@ -324,7 +337,14 @@ async def overview(
         (
             await db.execute(
                 select(RecurringRule)
-                .where(RecurringRule.user_id == user.id, RecurringRule.is_active.is_(True))
+                .join(FinanceAccount, FinanceAccount.id == RecurringRule.account_id)
+                .where(
+                    RecurringRule.user_id == user.id,
+                    RecurringRule.is_active.is_(True),
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                    func.upper(func.trim(FinanceAccount.currency)) == "INR",
+                )
                 .order_by(RecurringRule.next_due_on.asc())
             )
         ).scalars().all()
