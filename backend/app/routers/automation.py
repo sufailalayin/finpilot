@@ -32,6 +32,23 @@ from app.schemas.automation import (
 router = APIRouter(prefix="/automation", tags=["automation"])
 
 
+async def _load_owned_supported_account(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> FinanceAccount:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user_id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ensure_supported_account_currency(account)
+    return account
+
+
 @router.post("/recurring", response_model=RecurringRuleResponse, status_code=status.HTTP_201_CREATED)
 async def create_recurring(
     payload: RecurringRuleCreate,
@@ -186,13 +203,12 @@ async def create_credit_card_statement(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> BillResponse:
-    account = await db.scalar(
-        select(FinanceAccount).where(
-            FinanceAccount.id == payload.account_id,
-            FinanceAccount.user_id == user.id,
-        )
+    account = await _load_owned_supported_account(
+        db,
+        user.id,
+        payload.account_id,
     )
-    if account is None or account.account_type.value != "card":
+    if account.account_type.value != "card":
         raise HTTPException(status_code=404, detail="Credit card account not found")
     if payload.minimum_due is not None and payload.minimum_due > payload.amount:
         raise HTTPException(status_code=400, detail="Minimum due cannot exceed total due")
@@ -227,6 +243,12 @@ async def create_bill(
 ) -> BillResponse:
     if payload.frequency not in {"once", "weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported bill frequency")
+    if payload.account_id is not None:
+        await _load_owned_supported_account(
+            db,
+            user.id,
+            payload.account_id,
+        )
     bill = BillReminder(user_id=user.id, **payload.model_dump())
     db.add(bill)
     await db.commit()
@@ -251,6 +273,13 @@ async def update_bill(
         raise HTTPException(status_code=404, detail="Bill not found")
 
     values = payload.model_dump(exclude_unset=True)
+    if "account_id" in values and values["account_id"] is not None:
+        await _load_owned_supported_account(
+            db,
+            user.id,
+            values["account_id"],
+        )
+
     frequency = values.get("frequency", bill.frequency)
     if frequency not in {"once", "weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported bill frequency")
