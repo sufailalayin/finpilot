@@ -88,6 +88,20 @@ async def _cash_bank_balance(
     )
 
 
+async def _liability_delete_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    liability_id: uuid.UUID,
+) -> int:
+    payment_count = await db.scalar(
+        select(func.count()).select_from(LiabilityPayment).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.liability_id == liability_id,
+        )
+    )
+    return int(payment_count or 0)
+
+
 @router.post("", response_model=LiabilityResponse, status_code=status.HTTP_201_CREATED)
 async def create_liability(
     payload: LiabilityCreate,
@@ -180,6 +194,16 @@ async def delete_liability(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Liability not found")
+    blocker_count = await _liability_delete_blocker_count(
+        db,
+        user.id,
+        item.id,
+    )
+    if blocker_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Liability has payment history and cannot be deleted",
+        )
     await db.delete(item)
     await db.commit()
 
