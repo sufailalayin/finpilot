@@ -31,8 +31,9 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     );
   }
 
+  const search = request.nextUrl.search ?? "";
   const target =
-    base + "/" + path.map((segment) => encodeURIComponent(segment)).join("/");
+    base + "/" + path.map((segment) => encodeURIComponent(segment)).join("/") + search;
 
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
