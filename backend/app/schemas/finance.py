@@ -140,16 +140,19 @@ class TransactionUpdate(BaseModel):
 
 
 class TransferCreate(BaseModel):
-    from_account_id: uuid.UUID
-    to_account_id: uuid.UUID
+    from_account_id: uuid.UUID | None = None
+    to_account_id: uuid.UUID | None = None
+    external_party: str | None = Field(default=None, max_length=120)
     amount: Decimal = Field(gt=0)
     occurred_on: date
     note: str | None = None
 
 
 class TransferResponse(BaseModel):
-    outgoing: TransactionResponse
-    incoming: TransactionResponse
+    outgoing: TransactionResponse | None = None
+    incoming: TransactionResponse | None = None
+    transfer_type: Literal["internal", "outgoing_external", "incoming_external"] = "internal"
+    external_party: str | None = None
 
 
 class NetWorthResponse(BaseModel):

@@ -29,6 +29,20 @@ class _ProFeatureGateState extends State<ProFeatureGate> {
   void initState() {
     super.initState();
     _access = _hasAccess();
+    widget.api.dataRevision.addListener(_handleRevision);
+  }
+
+  void _handleRevision() {
+    if (!mounted) return;
+    setState(() {
+      _access = _hasAccess();
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.api.dataRevision.removeListener(_handleRevision);
+    super.dispose();
   }
 
   Future<bool> _hasAccess() async {

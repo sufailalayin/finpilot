@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +18,10 @@ from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountCu
 from app.services.finance_currency import ensure_same_transfer_currency, ensure_supported_account_currency, ensure_user_finance_currency
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _ensure_category_type(
@@ -606,48 +610,147 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
 
 @router.post("/transfers", response_model=TransferResponse, status_code=status.HTTP_201_CREATED)
 async def create_transfer(payload: TransferCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> TransferResponse:
-    if payload.from_account_id == payload.to_account_id:
+    if payload.from_account_id is None and payload.to_account_id is None:
+        raise HTTPException(status_code=400, detail="At least one internal account must be selected for transfer")
+    if payload.from_account_id is not None and payload.from_account_id == payload.to_account_id:
         raise HTTPException(status_code=400, detail="Transfer accounts must be different")
-    accounts = list((await db.execute(select(FinanceAccount).where(
-        FinanceAccount.user_id == user.id,
-        FinanceAccount.id.in_([payload.from_account_id, payload.to_account_id]),
-    ))).scalars().all())
-    if len(accounts) != 2:
-        raise HTTPException(status_code=404, detail="Transfer account not found")
-    accounts_by_id = {account.id: account for account in accounts}
-    ensure_same_transfer_currency(
-        accounts_by_id[payload.from_account_id],
-        accounts_by_id[payload.to_account_id],
-    )
 
-    outgoing = Transaction(
-        user_id=user.id,
-        account_id=payload.from_account_id,
-        transaction_type=TransactionType.EXPENSE,
-        is_internal_transfer=True,
-        amount=payload.amount,
-        occurred_on=payload.occurred_on,
-        merchant="Transfer out",
-        note=payload.note,
-    )
-    incoming = Transaction(
-        user_id=user.id,
-        account_id=payload.to_account_id,
-        transaction_type=TransactionType.INCOME,
-        is_internal_transfer=True,
-        amount=payload.amount,
-        occurred_on=payload.occurred_on,
-        merchant="Transfer in",
-        note=payload.note,
-    )
-    db.add_all([outgoing, incoming])
-    await db.commit()
-    await db.refresh(outgoing)
-    await db.refresh(incoming)
-    return TransferResponse(
-        outgoing=TransactionResponse.model_validate(outgoing),
-        incoming=TransactionResponse.model_validate(incoming),
-    )
+    external_party_clean = payload.external_party.strip() if payload.external_party and payload.external_party.strip() else None
+
+    # Scenario 1: Internal -> Internal
+    if payload.from_account_id is not None and payload.to_account_id is not None:
+        accounts = list((await db.execute(select(FinanceAccount).where(
+            FinanceAccount.user_id == user.id,
+            FinanceAccount.id.in_([payload.from_account_id, payload.to_account_id]),
+            FinanceAccount.is_archived.is_(False),
+        ))).scalars().all())
+        if len(accounts) != 2:
+            raise HTTPException(status_code=404, detail="Transfer account not found")
+        accounts_by_id = {account.id: account for account in accounts}
+        ensure_same_transfer_currency(
+            accounts_by_id[payload.from_account_id],
+            accounts_by_id[payload.to_account_id],
+        )
+
+        outgoing = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.from_account_id,
+            transaction_type=TransactionType.EXPENSE,
+            is_internal_transfer=True,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant="Transfer out",
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        incoming = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.to_account_id,
+            transaction_type=TransactionType.INCOME,
+            is_internal_transfer=True,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant="Transfer in",
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add_all([outgoing, incoming])
+        await db.commit()
+        await db.refresh(outgoing)
+        await db.refresh(incoming)
+        return TransferResponse(
+            outgoing=TransactionResponse.model_validate(outgoing),
+            incoming=TransactionResponse.model_validate(incoming),
+            transfer_type="internal",
+        )
+
+    # Scenario 2: Internal -> Outside (Outgoing external)
+    if payload.from_account_id is not None and payload.to_account_id is None:
+        from_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.from_account_id,
+                FinanceAccount.user_id == user.id,
+                FinanceAccount.is_archived.is_(False),
+            )
+        )
+        if from_account is None:
+            raise HTTPException(status_code=404, detail="Source transfer account not found")
+        ensure_supported_account_currency(from_account)
+
+        merchant_label = (
+            f"Transfer to {external_party_clean}"
+            if external_party_clean
+            else "Transfer to Outside / External"
+        )
+        outgoing = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.from_account_id,
+            transaction_type=TransactionType.EXPENSE,
+            is_internal_transfer=False,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant=merchant_label,
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add(outgoing)
+        await db.commit()
+        await db.refresh(outgoing)
+        return TransferResponse(
+            outgoing=TransactionResponse.model_validate(outgoing),
+            incoming=None,
+            transfer_type="outgoing_external",
+            external_party=external_party_clean,
+        )
+
+    # Scenario 3: Outside -> Internal (Incoming external)
+    if payload.from_account_id is None and payload.to_account_id is not None:
+        to_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.to_account_id,
+                FinanceAccount.user_id == user.id,
+                FinanceAccount.is_archived.is_(False),
+            )
+        )
+        if to_account is None:
+            raise HTTPException(status_code=404, detail="Destination transfer account not found")
+        ensure_supported_account_currency(to_account)
+
+        merchant_label = (
+            f"Transfer from {external_party_clean}"
+            if external_party_clean
+            else "Transfer from Outside / External"
+        )
+        incoming = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.to_account_id,
+            transaction_type=TransactionType.INCOME,
+            is_internal_transfer=False,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant=merchant_label,
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add(incoming)
+        await db.commit()
+        await db.refresh(incoming)
+        return TransferResponse(
+            outgoing=None,
+            incoming=TransactionResponse.model_validate(incoming),
+            transfer_type="incoming_external",
+            external_party=external_party_clean,
+        )
+
+    raise HTTPException(status_code=400, detail="Invalid transfer configuration")
 
 
 @router.patch("/categories/{category_id}", response_model=CategoryResponse)
