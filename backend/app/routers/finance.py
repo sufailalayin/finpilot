@@ -1,21 +1,170 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.asset import Asset
+from app.models.automation import BillReminder, RecurringRule
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
-from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
+from app.schemas.finance import AccountBalanceResponse, AccountCreate, AccountCurrencyRemediation, AccountCurrencyRemediationResponse, AccountResponse, AccountUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, CurrencyRemediationMode, TransactionCreate, TransactionResponse, TransactionUpdate, TransferCreate, TransferResponse, NetWorthResponse
+from app.services.finance_currency import ensure_same_transfer_currency, ensure_supported_account_currency, ensure_user_finance_currency
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_category_type(
+    category: Category,
+    transaction_type: TransactionType,
+) -> None:
+    if category.transaction_type != transaction_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category type must match transaction type",
+        )
+
+
+async def _load_transaction_category(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    category_id: uuid.UUID,
+    transaction_type: TransactionType,
+) -> Category:
+    category = await db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+    if category is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
+    _ensure_category_type(category, transaction_type)
+    return category
+
+
+async def _account_historical_activity_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    transaction_count = await db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account_id,
+        )
+    )
+    receivable_movement_count = await db.scalar(
+        select(func.count()).select_from(ReceivableMovement).where(
+            ReceivableMovement.user_id == user_id,
+            or_(
+                ReceivableMovement.source_account_id == account_id,
+                ReceivableMovement.destination_account_id == account_id,
+            ),
+        )
+    )
+    liability_funding_count = await db.scalar(
+        select(func.count()).select_from(Liability).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account_id,
+        )
+    )
+    liability_payment_count = await db.scalar(
+        select(func.count()).select_from(LiabilityPayment).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account_id,
+        )
+    )
+    return int(
+        (transaction_count or 0)
+        + (receivable_movement_count or 0)
+        + (liability_funding_count or 0)
+        + (liability_payment_count or 0)
+    )
+
+
+async def _account_archive_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    internal_transfer_count = await db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == account_id,
+            Transaction.is_internal_transfer.is_(True),
+        )
+    )
+    receivable_movement_count = await db.scalar(
+        select(func.count()).select_from(ReceivableMovement).where(
+            ReceivableMovement.user_id == user_id,
+            or_(
+                ReceivableMovement.source_account_id == account_id,
+                ReceivableMovement.destination_account_id == account_id,
+            ),
+        )
+    )
+    liability_funding_count = await db.scalar(
+        select(func.count()).select_from(Liability).where(
+            Liability.user_id == user_id,
+            Liability.funding_account_id == account_id,
+        )
+    )
+    liability_payment_count = await db.scalar(
+        select(func.count()).select_from(LiabilityPayment).where(
+            LiabilityPayment.user_id == user_id,
+            LiabilityPayment.payment_account_id == account_id,
+        )
+    )
+    return int(
+        (internal_transfer_count or 0)
+        + (receivable_movement_count or 0)
+        + (liability_funding_count or 0)
+        + (liability_payment_count or 0)
+    )
+
+
+async def _account_delete_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> int:
+    historical_count = await _account_historical_activity_count(
+        db,
+        user_id,
+        account_id,
+    )
+    recurring_count = await db.scalar(
+        select(func.count()).select_from(RecurringRule).where(
+            RecurringRule.user_id == user_id,
+            RecurringRule.account_id == account_id,
+        )
+    )
+    bill_count = await db.scalar(
+        select(func.count()).select_from(BillReminder).where(
+            BillReminder.user_id == user_id,
+            BillReminder.account_id == account_id,
+        )
+    )
+    return int(
+        historical_count
+        + (recurring_count or 0)
+        + (bill_count or 0)
+    )
+
 
 DEFAULT_CATEGORIES = {
     "expense": [
@@ -70,7 +219,11 @@ async def list_accounts(user: User = Depends(get_current_user), db: AsyncSession
 
 @router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_category(payload: CategoryCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> CategoryResponse:
-    category = Category(user_id=user.id, name=payload.name.strip(), transaction_type=payload.transaction_type)
+    category = Category(
+        user_id=user.id,
+        name=payload.name.strip(),
+        transaction_type=TransactionType(payload.transaction_type.value),
+    )
     db.add(category)
     await db.commit()
     await db.refresh(category)
@@ -88,17 +241,22 @@ async def create_transaction(payload: TransactionCreate, user: User = Depends(ge
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == payload.account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    ensure_supported_account_currency(account)
 
+    transaction_type = TransactionType(payload.transaction_type.value)
     if payload.category_id is not None:
-        category = await db.scalar(select(Category).where(Category.id == payload.category_id, Category.user_id == user.id))
-        if category is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+        await _load_transaction_category(
+            db,
+            user.id,
+            payload.category_id,
+            transaction_type,
+        )
 
     transaction = Transaction(
         user_id=user.id,
         account_id=payload.account_id,
         category_id=payload.category_id,
-        transaction_type=payload.transaction_type,
+        transaction_type=transaction_type,
         amount=payload.amount,
         occurred_on=payload.occurred_on,
         merchant=payload.merchant.strip() if payload.merchant else None,
@@ -137,6 +295,11 @@ async def delete_transaction(transaction_id: uuid.UUID, user: User = Depends(get
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.user_id == user.id))
     if transaction is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    if transaction.is_internal_transfer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Internal transfer rows cannot be deleted individually",
+        )
     await db.delete(transaction)
     await db.commit()
 
@@ -260,6 +423,7 @@ async def account_balances(user: User = Depends(get_current_user), db: AsyncSess
             name=account.name,
             account_type=account.account_type,
             currency=account.currency,
+            is_archived=account.is_archived,
             opening_balance=account.opening_balance,
             current_balance=current_balance,
             credit_limit=account.credit_limit,
@@ -278,7 +442,15 @@ async def update_account(account_id: uuid.UUID, payload: AccountUpdate, user: Us
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    if account.is_archived and set(values) - {"name"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Archived legacy accounts are read-only except for their display name",
+        )
+    if "opening_balance" in values:
+        ensure_supported_account_currency(account)
+    for field, value in values.items():
         if field == "name" and value is not None:
             value = value.strip()
         setattr(account, field, value)
@@ -287,14 +459,86 @@ async def update_account(account_id: uuid.UUID, payload: AccountUpdate, user: Us
     return AccountResponse.model_validate(account)
 
 
+@router.post(
+    "/accounts/{account_id}/currency-remediation",
+    response_model=AccountCurrencyRemediationResponse,
+)
+async def remediate_account_currency(
+    account_id: uuid.UUID,
+    payload: AccountCurrencyRemediation,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AccountCurrencyRemediationResponse:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user.id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.currency.strip().upper() == "INR":
+        raise HTTPException(status_code=409, detail="Account already uses INR")
+
+    historical_activity_count = await _account_historical_activity_count(
+        db,
+        user.id,
+        account.id,
+    )
+
+    if payload.mode == CurrencyRemediationMode.METADATA_CORRECTION:
+        if historical_activity_count or account.opening_balance != Decimal("0.00"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Metadata correction is only allowed for an unused zero-balance account. "
+                    "Archive this legacy account instead."
+                ),
+            )
+        account.currency = "INR"
+        account.is_archived = False
+    else:
+        archive_blocker_count = await _account_archive_blocker_count(
+            db,
+            user.id,
+            account.id,
+        )
+        if archive_blocker_count:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This account has linked transfer, receivable, or liability history. "
+                    "Automatic archive is blocked to avoid corrupting linked records."
+                ),
+            )
+        account.is_archived = True
+
+    await db.commit()
+    await db.refresh(account)
+    return AccountCurrencyRemediationResponse(
+        account=AccountResponse.model_validate(account),
+        action=payload.mode,
+        historical_activity_count=historical_activity_count,
+    )
+
+
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(account_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> None:
     account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == account_id, FinanceAccount.user_id == user.id))
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    count = await db.scalar(select(func.count()).select_from(Transaction).where(Transaction.account_id == account.id))
-    if count:
-        raise HTTPException(status_code=409, detail="Account has transactions and cannot be deleted")
+    blocker_count = await _account_delete_blocker_count(
+        db,
+        user.id,
+        account.id,
+    )
+    if blocker_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Account has linked financial history or automation and cannot be deleted"
+            ),
+        )
     await db.delete(account)
     await db.commit()
 
@@ -304,15 +548,57 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.user_id == user.id))
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    if transaction.is_internal_transfer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Internal transfer rows cannot be edited individually",
+        )
     values = payload.model_dump(exclude_unset=True)
+    if "transaction_type" in values:
+        values["transaction_type"] = TransactionType(values["transaction_type"].value)
     if "account_id" in values:
+        current_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == transaction.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if current_account is None:
+            raise HTTPException(status_code=404, detail="Current account not found")
+        ensure_supported_account_currency(current_account)
+
         account = await db.scalar(select(FinanceAccount).where(FinanceAccount.id == values["account_id"], FinanceAccount.user_id == user.id))
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
-    if values.get("category_id") is not None:
-        category = await db.scalar(select(Category).where(Category.id == values["category_id"], Category.user_id == user.id))
-        if category is None:
-            raise HTTPException(status_code=404, detail="Category not found")
+        ensure_supported_account_currency(account)
+    elif {"amount", "transaction_type", "occurred_on"} & values.keys():
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == transaction.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
+
+    effective_transaction_type = values.get(
+        "transaction_type",
+        transaction.transaction_type,
+    )
+    effective_category_id = (
+        values["category_id"]
+        if "category_id" in values
+        else transaction.category_id
+    )
+    if effective_category_id is not None:
+        await _load_transaction_category(
+            db,
+            user.id,
+            effective_category_id,
+            effective_transaction_type,
+        )
+
     for field, value in values.items():
         if field == "merchant" and value:
             value = value.strip()
@@ -324,41 +610,147 @@ async def update_transaction(transaction_id: uuid.UUID, payload: TransactionUpda
 
 @router.post("/transfers", response_model=TransferResponse, status_code=status.HTTP_201_CREATED)
 async def create_transfer(payload: TransferCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> TransferResponse:
-    if payload.from_account_id == payload.to_account_id:
+    if payload.from_account_id is None and payload.to_account_id is None:
+        raise HTTPException(status_code=400, detail="At least one internal account must be selected for transfer")
+    if payload.from_account_id is not None and payload.from_account_id == payload.to_account_id:
         raise HTTPException(status_code=400, detail="Transfer accounts must be different")
-    accounts = list((await db.execute(select(FinanceAccount).where(
-        FinanceAccount.user_id == user.id,
-        FinanceAccount.id.in_([payload.from_account_id, payload.to_account_id]),
-    ))).scalars().all())
-    if len(accounts) != 2:
-        raise HTTPException(status_code=404, detail="Transfer account not found")
 
-    outgoing = Transaction(
-        user_id=user.id,
-        account_id=payload.from_account_id,
-        transaction_type=TransactionType.EXPENSE,
-        amount=payload.amount,
-        occurred_on=payload.occurred_on,
-        merchant="Transfer out",
-        note=payload.note,
-    )
-    incoming = Transaction(
-        user_id=user.id,
-        account_id=payload.to_account_id,
-        transaction_type=TransactionType.INCOME,
-        amount=payload.amount,
-        occurred_on=payload.occurred_on,
-        merchant="Transfer in",
-        note=payload.note,
-    )
-    db.add_all([outgoing, incoming])
-    await db.commit()
-    await db.refresh(outgoing)
-    await db.refresh(incoming)
-    return TransferResponse(
-        outgoing=TransactionResponse.model_validate(outgoing),
-        incoming=TransactionResponse.model_validate(incoming),
-    )
+    external_party_clean = payload.external_party.strip() if payload.external_party and payload.external_party.strip() else None
+
+    # Scenario 1: Internal -> Internal
+    if payload.from_account_id is not None and payload.to_account_id is not None:
+        accounts = list((await db.execute(select(FinanceAccount).where(
+            FinanceAccount.user_id == user.id,
+            FinanceAccount.id.in_([payload.from_account_id, payload.to_account_id]),
+            FinanceAccount.is_archived.is_(False),
+        ))).scalars().all())
+        if len(accounts) != 2:
+            raise HTTPException(status_code=404, detail="Transfer account not found")
+        accounts_by_id = {account.id: account for account in accounts}
+        ensure_same_transfer_currency(
+            accounts_by_id[payload.from_account_id],
+            accounts_by_id[payload.to_account_id],
+        )
+
+        outgoing = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.from_account_id,
+            transaction_type=TransactionType.EXPENSE,
+            is_internal_transfer=True,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant="Transfer out",
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        incoming = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.to_account_id,
+            transaction_type=TransactionType.INCOME,
+            is_internal_transfer=True,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant="Transfer in",
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add_all([outgoing, incoming])
+        await db.commit()
+        await db.refresh(outgoing)
+        await db.refresh(incoming)
+        return TransferResponse(
+            outgoing=TransactionResponse.model_validate(outgoing),
+            incoming=TransactionResponse.model_validate(incoming),
+            transfer_type="internal",
+        )
+
+    # Scenario 2: Internal -> Outside (Outgoing external)
+    if payload.from_account_id is not None and payload.to_account_id is None:
+        from_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.from_account_id,
+                FinanceAccount.user_id == user.id,
+                FinanceAccount.is_archived.is_(False),
+            )
+        )
+        if from_account is None:
+            raise HTTPException(status_code=404, detail="Source transfer account not found")
+        ensure_supported_account_currency(from_account)
+
+        merchant_label = (
+            f"Transfer to {external_party_clean}"
+            if external_party_clean
+            else "Transfer to Outside / External"
+        )
+        outgoing = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.from_account_id,
+            transaction_type=TransactionType.EXPENSE,
+            is_internal_transfer=False,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant=merchant_label,
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add(outgoing)
+        await db.commit()
+        await db.refresh(outgoing)
+        return TransferResponse(
+            outgoing=TransactionResponse.model_validate(outgoing),
+            incoming=None,
+            transfer_type="outgoing_external",
+            external_party=external_party_clean,
+        )
+
+    # Scenario 3: Outside -> Internal (Incoming external)
+    if payload.from_account_id is None and payload.to_account_id is not None:
+        to_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == payload.to_account_id,
+                FinanceAccount.user_id == user.id,
+                FinanceAccount.is_archived.is_(False),
+            )
+        )
+        if to_account is None:
+            raise HTTPException(status_code=404, detail="Destination transfer account not found")
+        ensure_supported_account_currency(to_account)
+
+        merchant_label = (
+            f"Transfer from {external_party_clean}"
+            if external_party_clean
+            else "Transfer from Outside / External"
+        )
+        incoming = Transaction(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            account_id=payload.to_account_id,
+            transaction_type=TransactionType.INCOME,
+            is_internal_transfer=False,
+            amount=payload.amount,
+            occurred_on=payload.occurred_on,
+            merchant=merchant_label,
+            note=payload.note,
+            created_at=_utcnow(),
+            updated_at=_utcnow(),
+        )
+        db.add(incoming)
+        await db.commit()
+        await db.refresh(incoming)
+        return TransferResponse(
+            outgoing=None,
+            incoming=TransactionResponse.model_validate(incoming),
+            transfer_type="incoming_external",
+            external_party=external_party_clean,
+        )
+
+    raise HTTPException(status_code=400, detail="Invalid transfer configuration")
 
 
 @router.patch("/categories/{category_id}", response_model=CategoryResponse)
@@ -400,10 +792,14 @@ async def net_worth_summary(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> NetWorthResponse:
+    await ensure_user_finance_currency(db, user.id)
     accounts = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+                select(FinanceAccount).where(
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                )
             )
         ).scalars().all()
     )

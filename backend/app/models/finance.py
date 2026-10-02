@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,7 @@ class FinanceAccount(Base):
     name: Mapped[str] = mapped_column(String(120))
     account_type: Mapped[AccountType] = mapped_column(Enum(AccountType, name="account_type"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"))
     credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
@@ -65,6 +66,7 @@ class Transaction(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("finance_accounts.id", ondelete="CASCADE"), index=True)
     category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True)
     transaction_type: Mapped[TransactionType] = mapped_column(Enum(TransactionType, name="transaction_type"), nullable=False)
+    is_internal_transfer: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     merchant: Mapped[str | None] = mapped_column(String(120), nullable=True)

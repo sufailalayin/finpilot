@@ -12,6 +12,7 @@ from app.dependencies.entitlements import require_pro_user
 from app.models.finance import Category, Transaction, TransactionType
 from app.models.planning import Budget, SavingsGoal
 from app.models.user import User
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 from app.schemas.planning import (
     BudgetCreate,
     BudgetResponse,
@@ -29,6 +30,31 @@ from app.schemas.planning import (
 router = APIRouter(prefix="/planning", tags=["planning"])
 
 
+def _ensure_budget_category_type(category: Category) -> None:
+    if category.transaction_type != TransactionType.EXPENSE:
+        raise HTTPException(
+            status_code=400,
+            detail="Budget category must be an expense category",
+        )
+
+
+async def _load_owned_expense_category(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    category_id: uuid.UUID,
+) -> Category:
+    category = await db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    _ensure_budget_category_type(category)
+    return category
+
+
 @router.post("/budgets", response_model=BudgetResponse, status_code=status.HTTP_201_CREATED)
 async def create_budget(
     payload: BudgetCreate,
@@ -39,11 +65,11 @@ async def create_budget(
         raise HTTPException(status_code=400, detail="period_end must be on or after period_start")
 
     if payload.category_id is not None:
-        category = await db.scalar(
-            select(Category).where(Category.id == payload.category_id, Category.user_id == user.id)
+        await _load_owned_expense_category(
+            db,
+            user.id,
+            payload.category_id,
         )
-        if category is None:
-            raise HTTPException(status_code=404, detail="Category not found")
 
     budget = Budget(user_id=user.id, **payload.model_dump())
     db.add(budget)
@@ -67,14 +93,11 @@ async def update_budget(
 
     values = payload.model_dump(exclude_unset=True)
     if values.get("category_id") is not None:
-        category = await db.scalar(
-            select(Category).where(
-                Category.id == values["category_id"],
-                Category.user_id == user.id,
-            )
+        await _load_owned_expense_category(
+            db,
+            user.id,
+            values["category_id"],
         )
-        if category is None:
-            raise HTTPException(status_code=404, detail="Category not found")
 
     for field, value in values.items():
         if field == "name" and value is not None:
@@ -219,6 +242,7 @@ async def budget_dashboard(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> BudgetDashboard:
+    await ensure_user_finance_currency(db, user.id)
     today = date.today()
     budgets = list((await db.execute(
         select(Budget).where(
@@ -236,6 +260,8 @@ async def budget_dashboard(
     for budget in budgets:
         filters = [
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= min(today, budget.period_end),

@@ -153,8 +153,9 @@ class FinanceService {
   }
 
   Future<void> createTransfer({
-    required String fromAccountId,
-    required String toAccountId,
+    String? fromAccountId,
+    String? toAccountId,
+    String? externalParty,
     required double amount,
     required DateTime occurredOn,
     String? note,
@@ -164,6 +165,7 @@ class FinanceService {
       data: {
         'from_account_id': fromAccountId,
         'to_account_id': toAccountId,
+        'external_party': externalParty?.trim().isEmpty == true ? null : externalParty?.trim(),
         'amount': amount,
         'occurred_on': occurredOn.toIso8601String().split('T').first,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),

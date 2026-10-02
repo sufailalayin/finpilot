@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
@@ -10,9 +10,11 @@ from app.models.finance import Category, FinanceAccount, Transaction, Transactio
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import ReceivableMovement
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
 
 
 async def build_analytics(db: AsyncSession, user_id) -> dict:
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     start = today.replace(day=1)
     end = today.replace(day=monthrange(today.year, today.month)[1])
@@ -48,12 +50,10 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 ).label("expenses"),
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
         )
     ).one()
@@ -78,13 +78,11 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())
@@ -120,13 +118,11 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     for budget in budget_rows:
         conditions = [
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= budget.period_end,
-            or_(
-                Transaction.merchant.is_(None),
-                Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-            ),
+            Transaction.is_internal_transfer.is_(False),
         ]
         if budget.category_id is not None:
             conditions.append(Transaction.category_id == budget.category_id)
@@ -160,7 +156,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
     account_rows = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user_id)
+                select(FinanceAccount).where(FinanceAccount.user_id == user_id, FinanceAccount.is_archived.is_(False))
             )
         ).scalars().all()
     )
@@ -181,6 +177,7 @@ async def build_analytics(db: AsyncSession, user_id) -> dict:
                 )
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
@@ -512,6 +509,7 @@ def _month_shift(year: int, month: int, offset: int) -> tuple[int, int]:
 async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
     from app.models.finance import FinanceAccount
 
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     months = max(2, min(months, 24))
     trend: list[dict] = []
@@ -520,7 +518,10 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
         (
             await db.execute(
                 select(FinanceAccount)
-                .where(FinanceAccount.user_id == user_id)
+                .where(
+                    FinanceAccount.user_id == user_id,
+                    FinanceAccount.is_archived.is_(False),
+                )
                 .order_by(FinanceAccount.created_at.asc())
             )
         ).scalars().all()
@@ -554,12 +555,10 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     ).label("expenses"),
                 ).where(
                     Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.occurred_on >= start,
                     Transaction.occurred_on <= end,
-                    or_(
-                        Transaction.merchant.is_(None),
-                        Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                    ),
+                    Transaction.is_internal_transfer.is_(False),
                 )
             )
         ).one()
@@ -587,6 +586,7 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
                     )
                 ).where(
                     Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
                     Transaction.account_id == account.id,
                     Transaction.occurred_on <= end,
                 )
@@ -658,13 +658,11 @@ async def build_report(db: AsyncSession, user_id, months: int = 6) -> dict:
             .outerjoin(Category, Category.id == Transaction.category_id)
             .where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.transaction_type == TransactionType.EXPENSE,
                 Transaction.occurred_on >= current_start,
                 Transaction.occurred_on <= current_end,
-                or_(
-                    Transaction.merchant.is_(None),
-                    Transaction.merchant.notin_(("Transfer out", "Transfer in")),
-                ),
+                Transaction.is_internal_transfer.is_(False),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).desc())

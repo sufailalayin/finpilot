@@ -14,6 +14,7 @@ from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.receivable import ReceivableMovement
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
+from app.services.finance_currency import active_finance_account_ids, ensure_supported_account_currency, ensure_user_finance_currency
 from app.schemas.liability import (
     DebtOverview,
     LiabilityCreate,
@@ -105,6 +106,7 @@ async def create_liability(
         )
         if funding_account is None:
             raise HTTPException(status_code=404, detail="Funding account not found")
+        ensure_supported_account_currency(funding_account)
         if funding_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Borrowed money can only be received into Cash or Bank")
 
@@ -140,7 +142,23 @@ async def update_liability(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Liability not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    if values.get("funding_account_id") is not None:
+        funding_account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == values["funding_account_id"],
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if funding_account is None:
+            raise HTTPException(status_code=404, detail="Funding account not found")
+        ensure_supported_account_currency(funding_account)
+        if funding_account.account_type.value not in {"cash", "bank"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Borrowed money can only be received into Cash or Bank",
+            )
+    for field, value in values.items():
         if field == "name" and value is not None:
             value = value.strip()
         setattr(item, field, value)
@@ -192,6 +210,7 @@ async def record_payment(
         )
         if payment_account is None:
             raise HTTPException(status_code=404, detail="Payment account not found")
+        ensure_supported_account_currency(payment_account)
         if payment_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Loan payments can only come from Cash or Bank")
         available = await _cash_bank_balance(db, user.id, payment_account)
@@ -221,6 +240,7 @@ async def debt_overview(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> DebtOverview:
+    await ensure_user_finance_currency(db, user.id)
     liabilities = list(
         (
             await db.execute(
@@ -251,6 +271,7 @@ async def debt_overview(
             )
         ).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
         )

@@ -294,74 +294,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _accountBalanceCard(Map<String, dynamic> account) {
+  Widget _accountChipBox(Map<String, dynamic> account, double width) {
     final balance = double.tryParse(account['balance'].toString()) ?? 0;
     final type = account['account_type']?.toString() ?? 'account';
-    final prettyType = type.isEmpty
-        ? 'Account'
-        : type[0].toUpperCase() + type.substring(1);
+    final name = account['account_name']?.toString() ?? 'Account';
+    final isCard = type == 'card';
 
-    IconData icon = Icons.account_balance_wallet_outlined;
-    if (type == 'bank') icon = Icons.account_balance_outlined;
-    if (type == 'cash') icon = Icons.payments_outlined;
-    if (type == 'card') icon = Icons.credit_card_outlined;
-    if (type == 'wallet') icon = Icons.wallet_outlined;
+    IconData icon = Icons.account_balance_wallet_rounded;
+    Color iconColor = const Color(0xFF0F766E);
+    Color iconBg = const Color(0xFFE6F4F1);
+    if (type == 'bank') {
+      icon = Icons.account_balance_rounded;
+      iconColor = const Color(0xFF1E40AF);
+      iconBg = const Color(0xFFEFF6FF);
+    } else if (type == 'cash') {
+      icon = Icons.payments_rounded;
+      iconColor = const Color(0xFF15803D);
+      iconBg = const Color(0xFFF0FDF4);
+    } else if (type == 'card') {
+      icon = Icons.credit_card_rounded;
+      iconColor = const Color(0xFF7E22CE);
+      iconBg = const Color(0xFFFAF5FF);
+    } else if (type == 'wallet') {
+      icon = Icons.wallet_rounded;
+      iconColor = const Color(0xFFB45309);
+      iconBg = const Color(0xFFFFFBEB);
+    }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
-        ),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 21,
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            child: Icon(icon, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+    final balanceText = isCard
+        ? '${_money.format(balance)} Due'
+        : _money.format(balance);
+
+    return SizedBox(
+      width: width,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openAccounts,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 68),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.7),
+                width: 1.1,
+              ),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  account['account_name'].toString(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Icon(icon, size: 14, color: iconColor),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 6),
                 Text(
-                  prettyType + ' • ' + account['currency'].toString(),
+                  balanceText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14.5,
+                    color: isCard && balance > 0
+                        ? const Color(0xFFB91C1C)
+                        : null,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              _money.format(balance),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -691,10 +718,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   )
                 else
-                  ...data.accounts.map(
-                    (raw) => _accountBalanceCard(
-                      Map<String, dynamic>.from(raw as Map),
-                    ),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final itemWidth = (constraints.maxWidth - 10) / 2;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: data.accounts.map((raw) {
+                          return _accountChipBox(
+                            Map<String, dynamic>.from(raw as Map),
+                            itemWidth,
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
                 const SizedBox(height: 18),
                 Row(
@@ -739,7 +776,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _quickAction(
                           label: 'Transfer',
                           icon: Icons.swap_horiz_rounded,
-                          onTap: data.accounts.length >= 2
+                          onTap: data.accounts.isNotEmpty
                               ? _openTransfer
                               : _openAccounts,
                           width: itemWidth,

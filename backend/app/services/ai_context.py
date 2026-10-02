@@ -8,12 +8,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.automation import BillReminder, RecurringRule
 from app.models.asset import Asset
 from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
+from app.models.receivable import Receivable, ReceivableMovement
 from app.services.analytics import build_analytics
+from app.services.finance_currency import active_finance_account_ids, ensure_user_finance_currency
+
+
+def _ai_account_balance(account: FinanceAccount, movement: Decimal) -> tuple[Decimal, bool]:
+    if account.account_type.value == "card":
+        return max(account.opening_balance - movement, Decimal("0.00")), True
+    return account.opening_balance + movement, False
+
+
+def _ai_account_movement(
+    transaction_movement: Decimal,
+    receivable_movement: Decimal,
+    liability_inflow: Decimal,
+    liability_outflow: Decimal,
+) -> Decimal:
+    return (
+        transaction_movement
+        + receivable_movement
+        + liability_inflow
+        - liability_outflow
+    )
+
+
+def _ai_net_worth(
+    account_total: Decimal,
+    asset_total: Decimal,
+    receivables_total: Decimal,
+    total_liabilities: Decimal,
+) -> Decimal:
+    return account_total + asset_total + receivables_total - total_liabilities
 
 
 async def build_finance_context(db: AsyncSession, user_id) -> dict:
+    await ensure_user_finance_currency(db, user_id)
     today = date.today()
     start = today.replace(day=1)
     end = today.replace(day=monthrange(today.year, today.month)[1])
@@ -41,6 +73,8 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 ).label("expense"),
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                Transaction.is_internal_transfer.is_(False),
                 Transaction.occurred_on >= start,
                 Transaction.occurred_on <= end,
             )
@@ -55,6 +89,8 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         .join(Transaction, Transaction.category_id == Category.id)
         .where(
             Transaction.user_id == user_id,
+            Transaction.account_id.in_(active_finance_account_ids(user_id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= start,
             Transaction.occurred_on <= end,
@@ -68,12 +104,17 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         (
             await db.execute(
                 select(FinanceAccount)
-                .where(FinanceAccount.user_id == user_id)
+                .where(
+                    FinanceAccount.user_id == user_id,
+                    FinanceAccount.is_archived.is_(False),
+                )
                 .order_by(FinanceAccount.created_at.asc())
             )
         ).scalars().all()
     )
     accounts = []
+    account_total = Decimal("0.00")
+    card_liabilities = Decimal("0.00")
     for account in account_models:
         movement = await db.scalar(
             select(
@@ -89,16 +130,60 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                 )
             ).where(
                 Transaction.user_id == user_id,
+                Transaction.account_id.in_(active_finance_account_ids(user_id)),
                 Transaction.account_id == account.id,
             )
         )
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user_id)
+        )
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user_id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user_id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        total_movement = _ai_account_movement(
+            movement or Decimal("0.00"),
+            receivable_movement or Decimal("0.00"),
+            liability_inflow or Decimal("0.00"),
+            liability_outflow or Decimal("0.00"),
+        )
+        current_balance, is_card_liability = _ai_account_balance(
+            account,
+            total_movement,
+        )
+        if is_card_liability:
+            card_liabilities += current_balance
+        else:
+            account_total += current_balance
+
         accounts.append(
             {
                 "name": account.name,
                 "account_type": account.account_type.value,
-                "current_balance": str(
-                    account.opening_balance + (movement or Decimal("0.00"))
-                ),
+                "current_balance": str(current_balance),
             }
         )
 
@@ -214,7 +299,11 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
                     Transaction.merchant,
                     Transaction.note,
                 )
-                .where(Transaction.user_id == user_id)
+                .where(
+                    Transaction.user_id == user_id,
+                    Transaction.account_id.in_(active_finance_account_ids(user_id)),
+                    Transaction.is_internal_transfer.is_(False),
+                )
                 .order_by(Transaction.occurred_on.desc(), Transaction.created_at.desc())
                 .limit(20)
             )
@@ -222,15 +311,37 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
     )
 
     health = await build_analytics(db, user_id)
-    account_total = sum(
-        (Decimal(account["current_balance"]) for account in accounts),
-        Decimal("0.00"),
+    asset_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Asset.current_value),
+                Decimal("0.00"),
+            )
+        ).where(Asset.user_id == user_id)
     )
-    asset_total = sum((row.current_value for row in assets), Decimal("0.00"))
-    debt_total = sum(
-        (row.outstanding_principal for row in liabilities),
-        Decimal("0.00"),
+    asset_total = asset_total or Decimal("0.00")
+    receivables_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Receivable.original_amount - Receivable.amount_received),
+                Decimal("0.00"),
+            )
+        ).where(
+            Receivable.user_id == user_id,
+            Receivable.amount_received < Receivable.original_amount,
+        )
     )
+    receivables_total = receivables_total or Decimal("0.00")
+    debt_total = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Liability.outstanding_principal),
+                Decimal("0.00"),
+            )
+        ).where(Liability.user_id == user_id)
+    )
+    debt_total = debt_total or Decimal("0.00")
+    total_liabilities = debt_total + card_liabilities
 
     return {
         "month": {
@@ -248,8 +359,16 @@ async def build_finance_context(db: AsyncSession, user_id) -> dict:
         "wealth_summary": {
             "liquid_accounts": str(account_total),
             "investment_assets": str(asset_total),
-            "liabilities": str(debt_total),
-            "net_worth": str(account_total + asset_total - debt_total),
+            "receivables": str(receivables_total),
+            "liabilities": str(total_liabilities),
+            "net_worth": str(
+                _ai_net_worth(
+                    account_total,
+                    asset_total,
+                    receivables_total,
+                    total_liabilities,
+                )
+            ),
         },
         "budgets": [
             {

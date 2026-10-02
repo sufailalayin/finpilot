@@ -283,7 +283,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       label: const Text('Add account'),
                     ),
                     FilledButton.tonalIcon(
-                      onPressed: accounts.length >= 2 ? _transfer : null,
+                      onPressed: accounts.isNotEmpty ? _transfer : null,
                       icon: const Icon(Icons.swap_horiz),
                       label: const Text('Transfer'),
                     ),

@@ -11,6 +11,7 @@ from app.models.finance import FinanceAccount, Transaction, TransactionType
 from app.models.receivable import Receivable, ReceivableMovement, ReceivableRepayment
 from app.models.liability import Liability, LiabilityPayment
 from app.models.user import User
+from app.services.finance_currency import ensure_supported_account_currency
 from app.schemas.receivable import (
     ReceivableCreate,
     ReceivableDetailResponse,
@@ -146,6 +147,7 @@ async def create_movement(
         )
         if source_account is None:
             raise HTTPException(status_code=404, detail="Source account not found")
+        ensure_supported_account_currency(source_account)
         if source_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Source must be Cash or Bank")
         available = await _available_account_balance(db, user.id, source_account)
@@ -164,6 +166,7 @@ async def create_movement(
         )
         if destination_account is None:
             raise HTTPException(status_code=404, detail="Destination account not found")
+        ensure_supported_account_currency(destination_account)
         if destination_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Destination must be Cash or Bank")
 
@@ -250,6 +253,7 @@ async def create_receivable(
         )
         if source_account is None:
             raise HTTPException(status_code=404, detail="Source account not found")
+        ensure_supported_account_currency(source_account)
         if source_account.account_type.value not in {"cash", "bank"}:
             raise HTTPException(status_code=400, detail="Money can only be given from Cash or Bank")
         available = await _available_account_balance(db, user.id, source_account)
@@ -422,6 +426,7 @@ async def record_repayment(
         )
         if destination_account is None:
             raise HTTPException(status_code=404, detail="Destination account not found")
+        ensure_supported_account_currency(destination_account)
 
     payment = ReceivableRepayment(
         receivable_id=item.id,

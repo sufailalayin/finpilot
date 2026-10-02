@@ -8,6 +8,8 @@ class TransferScreen extends StatefulWidget {
 
   final ApiClient api;
 
+  static const String outsideAccount = '__outside__';
+
   @override
   State<TransferScreen> createState() => _TransferScreenState();
 }
@@ -16,6 +18,7 @@ class _TransferScreenState extends State<TransferScreen> {
   late final FinanceService _finance = FinanceService(widget.api);
   final _amount = TextEditingController();
   final _note = TextEditingController();
+  final _externalParty = TextEditingController();
 
   List<dynamic> _accounts = const [];
   String? _from;
@@ -40,6 +43,9 @@ class _TransferScreenState extends State<TransferScreen> {
         if (accounts.length >= 2) {
           _from = accounts[0]['id'].toString();
           _to = accounts[1]['id'].toString();
+        } else if (accounts.isNotEmpty) {
+          _from = accounts[0]['id'].toString();
+          _to = TransferScreen.outsideAccount;
         }
         _loading = false;
       });
@@ -54,13 +60,24 @@ class _TransferScreenState extends State<TransferScreen> {
 
   Future<void> _save() async {
     final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
-    if (_from == null ||
-        _to == null ||
-        _from == _to ||
-        amount == null ||
-        amount <= 0) {
+    final fromIsOutside = _from == TransferScreen.outsideAccount;
+    final toIsOutside = _to == TransferScreen.outsideAccount;
+
+    if (fromIsOutside && toIsOutside) {
+      setState(() => _error = 'Both source and destination cannot be Outside / External.');
+      return;
+    }
+
+    if (_from == null || _to == null || _from == _to) {
       setState(
-        () => _error = 'Select two different accounts and a valid amount.',
+        () => _error = 'Select two different accounts.',
+      );
+      return;
+    }
+
+    if (amount == null || amount <= 0) {
+      setState(
+        () => _error = 'Enter a valid transfer amount greater than 0.',
       );
       return;
     }
@@ -71,18 +88,22 @@ class _TransferScreenState extends State<TransferScreen> {
     });
 
     try {
+      final externalPartyText = _externalParty.text.trim();
       await _finance.createTransfer(
-        fromAccountId: _from!,
-        toAccountId: _to!,
+        fromAccountId: fromIsOutside ? null : _from,
+        toAccountId: toIsOutside ? null : _to,
+        externalParty: (fromIsOutside || toIsOutside) && externalPartyText.isNotEmpty
+            ? externalPartyText
+            : null,
         amount: amount,
         occurredOn: _date,
         note: _note.text,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Unable to complete transfer.');
+      setState(() => _error = 'Unable to complete transfer. Please check accounts and balance.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -92,11 +113,39 @@ class _TransferScreenState extends State<TransferScreen> {
   void dispose() {
     _amount.dispose();
     _note.dispose();
+    _externalParty.dispose();
     super.dispose();
+  }
+
+  List<DropdownMenuItem<String>> _buildAccountDropdownItems() {
+    return [
+      const DropdownMenuItem<String>(
+        value: TransferScreen.outsideAccount,
+        child: Row(
+          children: [
+            Icon(Icons.open_in_new_rounded, size: 18),
+            SizedBox(width: 8),
+            Text(
+              'Outside / External',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+      ..._accounts.map(
+        (a) => DropdownMenuItem<String>(
+          value: a['id'].toString(),
+          child: Text(a['name'].toString()),
+        ),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
+    final fromIsOutside = _from == TransferScreen.outsideAccount;
+    final toIsOutside = _to == TransferScreen.outsideAccount;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Transfer money')),
       body: _loading
@@ -107,30 +156,36 @@ class _TransferScreenState extends State<TransferScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _from,
                   decoration: const InputDecoration(labelText: 'From account'),
-                  items: _accounts
-                      .map(
-                        (a) => DropdownMenuItem<String>(
-                          value: a['id'].toString(),
-                          child: Text(a['name'].toString()),
-                        ),
-                      )
-                      .toList(),
+                  items: _buildAccountDropdownItems(),
                   onChanged: (value) => setState(() => _from = value),
                 ),
+                if (fromIsOutside) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _externalParty,
+                    decoration: const InputDecoration(
+                      labelText: 'External source / sender (optional)',
+                      hintText: 'e.g., Client, employer, friend',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _to,
                   decoration: const InputDecoration(labelText: 'To account'),
-                  items: _accounts
-                      .map(
-                        (a) => DropdownMenuItem<String>(
-                          value: a['id'].toString(),
-                          child: Text(a['name'].toString()),
-                        ),
-                      )
-                      .toList(),
+                  items: _buildAccountDropdownItems(),
                   onChanged: (value) => setState(() => _to = value),
                 ),
+                if (toIsOutside) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _externalParty,
+                    decoration: const InputDecoration(
+                      labelText: 'External recipient / party (optional)',
+                      hintText: 'e.g., Landlord, vendor, third-party wallet',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _amount,
@@ -181,7 +236,7 @@ class _TransferScreenState extends State<TransferScreen> {
                 ],
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: _saving || _accounts.length < 2 ? null : _save,
+                  onPressed: _saving || _accounts.isEmpty ? null : _save,
                   child: Text(_saving ? 'Transferring...' : 'Transfer money'),
                 ),
               ],

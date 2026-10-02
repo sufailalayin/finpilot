@@ -10,11 +10,12 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
 from app.models.automation import BillReminder, RecurringRule
-from app.models.finance import FinanceAccount, Transaction, TransactionType
-from app.models.liability import Liability
+from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
+from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
-from app.models.receivable import Receivable
+from app.models.receivable import Receivable, ReceivableMovement
 from app.models.user import User
+from app.services.finance_currency import active_finance_account_ids, ensure_supported_account_currency, ensure_user_finance_currency
 from app.schemas.automation import (
     AutomationOverview,
     AlertOverview,
@@ -31,6 +32,52 @@ from app.schemas.automation import (
 router = APIRouter(prefix="/automation", tags=["automation"])
 
 
+async def _load_owned_supported_account(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> FinanceAccount:
+    account = await db.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user_id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ensure_supported_account_currency(account)
+    return account
+
+
+def _ensure_recurring_category_type(
+    category: Category,
+    transaction_type: str,
+) -> None:
+    if category.transaction_type.value != transaction_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category type must match recurring transaction type",
+        )
+
+
+async def _load_owned_recurring_category(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    category_id: uuid.UUID,
+    transaction_type: str,
+) -> Category:
+    category = await db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    _ensure_recurring_category_type(category, transaction_type)
+    return category
+
+
 @router.post("/recurring", response_model=RecurringRuleResponse, status_code=status.HTTP_201_CREATED)
 async def create_recurring(
     payload: RecurringRuleCreate,
@@ -45,9 +92,17 @@ async def create_recurring(
     )
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
+    ensure_supported_account_currency(account)
 
     if payload.transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
+    if payload.category_id is not None:
+        await _load_owned_recurring_category(
+            db,
+            user.id,
+            payload.category_id,
+            payload.transaction_type,
+        )
     if payload.frequency not in {"weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
 
@@ -84,10 +139,36 @@ async def update_recurring(
         )
         if account is None:
             raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
+    elif values.get("is_active") is True:
+        account = await db.scalar(
+            select(FinanceAccount).where(
+                FinanceAccount.id == rule.account_id,
+                FinanceAccount.user_id == user.id,
+            )
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        ensure_supported_account_currency(account)
 
     tx_type = values.get("transaction_type", rule.transaction_type)
     if tx_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
+
+    category_needs_validation = (
+        "category_id" in values
+        or "transaction_type" in values
+        or values.get("is_active") is True
+    )
+    effective_category_id = values.get("category_id", rule.category_id)
+    if category_needs_validation and effective_category_id is not None:
+        await _load_owned_recurring_category(
+            db,
+            user.id,
+            effective_category_id,
+            tx_type,
+        )
+
     frequency = values.get("frequency", rule.frequency)
     if frequency not in {"weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
@@ -173,13 +254,12 @@ async def create_credit_card_statement(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> BillResponse:
-    account = await db.scalar(
-        select(FinanceAccount).where(
-            FinanceAccount.id == payload.account_id,
-            FinanceAccount.user_id == user.id,
-        )
+    account = await _load_owned_supported_account(
+        db,
+        user.id,
+        payload.account_id,
     )
-    if account is None or account.account_type.value != "card":
+    if account.account_type.value != "card":
         raise HTTPException(status_code=404, detail="Credit card account not found")
     if payload.minimum_due is not None and payload.minimum_due > payload.amount:
         raise HTTPException(status_code=400, detail="Minimum due cannot exceed total due")
@@ -214,6 +294,12 @@ async def create_bill(
 ) -> BillResponse:
     if payload.frequency not in {"once", "weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported bill frequency")
+    if payload.account_id is not None:
+        await _load_owned_supported_account(
+            db,
+            user.id,
+            payload.account_id,
+        )
     bill = BillReminder(user_id=user.id, **payload.model_dump())
     db.add(bill)
     await db.commit()
@@ -238,6 +324,13 @@ async def update_bill(
         raise HTTPException(status_code=404, detail="Bill not found")
 
     values = payload.model_dump(exclude_unset=True)
+    if "account_id" in values and values["account_id"] is not None:
+        await _load_owned_supported_account(
+            db,
+            user.id,
+            values["account_id"],
+        )
+
     frequency = values.get("frequency", bill.frequency)
     if frequency not in {"once", "weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported bill frequency")
@@ -303,6 +396,20 @@ async def mark_bill_paid(
     return BillResponse.model_validate(bill)
 
 
+def _automation_account_movement(
+    transaction_movement: Decimal,
+    receivable_movement: Decimal,
+    liability_inflow: Decimal,
+    liability_outflow: Decimal,
+) -> Decimal:
+    return (
+        transaction_movement
+        + receivable_movement
+        + liability_inflow
+        - liability_outflow
+    )
+
+
 def _occurrences_within_30d(rule: RecurringRule, today: date) -> int:
     end = today + timedelta(days=30)
     if not rule.is_active or rule.next_due_on > end:
@@ -324,7 +431,14 @@ async def overview(
         (
             await db.execute(
                 select(RecurringRule)
-                .where(RecurringRule.user_id == user.id, RecurringRule.is_active.is_(True))
+                .join(FinanceAccount, FinanceAccount.id == RecurringRule.account_id)
+                .where(
+                    RecurringRule.user_id == user.id,
+                    RecurringRule.is_active.is_(True),
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                    func.upper(func.trim(FinanceAccount.currency)) == "INR",
+                )
                 .order_by(RecurringRule.next_due_on.asc())
             )
         ).scalars().all()
@@ -373,6 +487,7 @@ async def smart_alerts(
     user: User = Depends(require_pro_user),
     db: AsyncSession = Depends(get_db),
 ) -> AlertOverview:
+    await ensure_user_finance_currency(db, user.id)
     today = date.today()
     horizon = today + timedelta(days=30)
     bills = list(
@@ -523,6 +638,8 @@ async def smart_alerts(
     for budget in budgets:
         filters = [
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= budget.period_start,
             Transaction.occurred_on <= today,
@@ -615,6 +732,8 @@ async def smart_alerts(
     month_expense = await db.scalar(
         select(func.coalesce(func.sum(Transaction.amount), Decimal("0.00"))).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= month_start,
             Transaction.occurred_on <= today,
@@ -627,12 +746,18 @@ async def smart_alerts(
     accounts = list(
         (
             await db.execute(
-                select(FinanceAccount).where(FinanceAccount.user_id == user.id)
+                select(FinanceAccount).where(
+                    FinanceAccount.user_id == user.id,
+                    FinanceAccount.is_archived.is_(False),
+                )
             )
         ).scalars().all()
     )
     total_liquid = Decimal("0.00")
     for account in accounts:
+        if account.account_type.value == "card":
+            continue
+
         movement = await db.scalar(
             select(
                 func.coalesce(
@@ -647,10 +772,47 @@ async def smart_alerts(
                 )
             ).where(
                 Transaction.user_id == user.id,
+                Transaction.account_id.in_(active_finance_account_ids(user.id)),
                 Transaction.account_id == account.id,
             )
         )
-        total_liquid += account.opening_balance + (movement or Decimal("0.00"))
+        receivable_movement = await db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ReceivableMovement.destination_account_id == account.id, ReceivableMovement.amount),
+                            (ReceivableMovement.source_account_id == account.id, -ReceivableMovement.amount),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                )
+            ).where(ReceivableMovement.user_id == user.id)
+        )
+        liability_inflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(Liability.original_principal), Decimal("0.00"))
+            ).where(
+                Liability.user_id == user.id,
+                Liability.funding_account_id == account.id,
+            )
+        )
+        liability_outflow = await db.scalar(
+            select(
+                func.coalesce(func.sum(LiabilityPayment.amount), Decimal("0.00"))
+            ).where(
+                LiabilityPayment.user_id == user.id,
+                LiabilityPayment.payment_account_id == account.id,
+            )
+        )
+        total_movement = _automation_account_movement(
+            movement or Decimal("0.00"),
+            receivable_movement or Decimal("0.00"),
+            liability_inflow or Decimal("0.00"),
+            liability_outflow or Decimal("0.00"),
+        )
+        total_liquid += account.opening_balance + total_movement
 
     if avg_daily_expense > 0:
         runway_days = float(total_liquid / avg_daily_expense)
@@ -668,6 +830,8 @@ async def smart_alerts(
     average_transaction = await db.scalar(
         select(func.avg(Transaction.amount)).where(
             Transaction.user_id == user.id,
+            Transaction.account_id.in_(active_finance_account_ids(user.id)),
+            Transaction.is_internal_transfer.is_(False),
             Transaction.transaction_type == TransactionType.EXPENSE,
             Transaction.occurred_on >= month_start,
             Transaction.occurred_on <= today,
@@ -680,6 +844,8 @@ async def smart_alerts(
                     select(Transaction)
                     .where(
                         Transaction.user_id == user.id,
+                        Transaction.account_id.in_(active_finance_account_ids(user.id)),
+                        Transaction.is_internal_transfer.is_(False),
                         Transaction.transaction_type == TransactionType.EXPENSE,
                         Transaction.occurred_on >= today - timedelta(days=3),
                         Transaction.amount >= Decimal(str(average_transaction)) * Decimal("2.5"),
