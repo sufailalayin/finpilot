@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -86,6 +86,29 @@ async def _available_account_balance(
         + (liability_inflow or Decimal("0.00"))
         - (liability_outflow or Decimal("0.00"))
     )
+
+
+async def _receivable_delete_blocker_count(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    receivable_id: uuid.UUID,
+) -> int:
+    repayment_count = await db.scalar(
+        select(func.count()).select_from(ReceivableRepayment).where(
+            ReceivableRepayment.user_id == user_id,
+            ReceivableRepayment.receivable_id == receivable_id,
+        )
+    )
+    movement_count = await db.scalar(
+        select(func.count()).select_from(ReceivableMovement).where(
+            ReceivableMovement.user_id == user_id,
+            or_(
+                ReceivableMovement.source_receivable_id == receivable_id,
+                ReceivableMovement.destination_receivable_id == receivable_id,
+            ),
+        )
+    )
+    return int((repayment_count or 0) + (movement_count or 0))
 
 
 def _serialize(item: Receivable) -> ReceivableResponse:
@@ -473,5 +496,15 @@ async def delete_receivable(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
+    blocker_count = await _receivable_delete_blocker_count(
+        db,
+        user.id,
+        item.id,
+    )
+    if blocker_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Receivable has repayment or movement history and cannot be deleted",
+        )
     await db.delete(item)
     await db.commit()
