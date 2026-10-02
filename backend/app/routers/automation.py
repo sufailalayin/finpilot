@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.entitlements import require_pro_user
 from app.models.automation import BillReminder, RecurringRule
-from app.models.finance import FinanceAccount, Transaction, TransactionType
+from app.models.finance import Category, FinanceAccount, Transaction, TransactionType
 from app.models.liability import Liability, LiabilityPayment
 from app.models.planning import Budget, SavingsGoal
 from app.models.receivable import Receivable, ReceivableMovement
@@ -49,6 +49,35 @@ async def _load_owned_supported_account(
     return account
 
 
+def _ensure_recurring_category_type(
+    category: Category,
+    transaction_type: str,
+) -> None:
+    if category.transaction_type.value != transaction_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category type must match recurring transaction type",
+        )
+
+
+async def _load_owned_recurring_category(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    category_id: uuid.UUID,
+    transaction_type: str,
+) -> Category:
+    category = await db.scalar(
+        select(Category).where(
+            Category.id == category_id,
+            Category.user_id == user_id,
+        )
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    _ensure_recurring_category_type(category, transaction_type)
+    return category
+
+
 @router.post("/recurring", response_model=RecurringRuleResponse, status_code=status.HTTP_201_CREATED)
 async def create_recurring(
     payload: RecurringRuleCreate,
@@ -67,6 +96,13 @@ async def create_recurring(
 
     if payload.transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
+    if payload.category_id is not None:
+        await _load_owned_recurring_category(
+            db,
+            user.id,
+            payload.category_id,
+            payload.transaction_type,
+        )
     if payload.frequency not in {"weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
 
@@ -118,6 +154,21 @@ async def update_recurring(
     tx_type = values.get("transaction_type", rule.transaction_type)
     if tx_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="transaction_type must be income or expense")
+
+    category_needs_validation = (
+        "category_id" in values
+        or "transaction_type" in values
+        or values.get("is_active") is True
+    )
+    effective_category_id = values.get("category_id", rule.category_id)
+    if category_needs_validation and effective_category_id is not None:
+        await _load_owned_recurring_category(
+            db,
+            user.id,
+            effective_category_id,
+            tx_type,
+        )
+
     frequency = values.get("frequency", rule.frequency)
     if frequency not in {"weekly", "monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
