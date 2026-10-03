@@ -1,3 +1,4 @@
+import inspect
 from uuid import uuid4
 
 import httpx
@@ -133,3 +134,12 @@ async def test_signup_otp_resend_is_rate_limited_and_wrong_code_is_rejected():
         )
         assert correct.status_code == 200, correct.text
         assert correct.json()["user"]["email_verified"] is True
+
+
+
+def test_otp_verification_serializes_single_use_consumption():
+    from app.services.auth_otp import verify_otp
+
+    source = inspect.getsource(verify_otp)
+    assert ".with_for_update()" in source
+    assert "AuthOtpChallenge.consumed_at.is_(None)" in source
