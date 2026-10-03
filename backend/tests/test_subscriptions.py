@@ -140,3 +140,45 @@ def test_existing_entitlement_is_not_replaced():
     assert entitlement is existing
     assert user.entitlement is existing
     assert entitlement.status == EntitlementStatus.TRIAL
+
+
+def test_manual_admin_reactivation_clears_stale_paid_expiry():
+    now = datetime.now(timezone.utc)
+    entitlement = Entitlement(
+        plan_code=PlanCode.FREE,
+        status=EntitlementStatus.EXPIRED,
+        paid_until=now - timedelta(days=1),
+    )
+
+    apply_manual_plan_change(
+        entitlement,
+        plan_code=PlanCode.PRO,
+        entitlement_status=EntitlementStatus.ACTIVE,
+        now=now,
+    )
+    normalize_paid_entitlement(entitlement, now=now)
+
+    assert entitlement.plan_code == PlanCode.PRO
+    assert entitlement.status == EntitlementStatus.ACTIVE
+    assert entitlement.paid_until is None
+
+
+def test_manual_admin_reactivation_preserves_future_paid_expiry():
+    now = datetime.now(timezone.utc)
+    future_expiry = now + timedelta(days=30)
+    entitlement = Entitlement(
+        plan_code=PlanCode.FREE,
+        status=EntitlementStatus.EXPIRED,
+        paid_until=future_expiry,
+    )
+
+    apply_manual_plan_change(
+        entitlement,
+        plan_code=PlanCode.PRO,
+        entitlement_status=EntitlementStatus.ACTIVE,
+        now=now,
+    )
+
+    assert entitlement.plan_code == PlanCode.PRO
+    assert entitlement.status == EntitlementStatus.ACTIVE
+    assert entitlement.paid_until == future_expiry
