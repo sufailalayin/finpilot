@@ -60,6 +60,7 @@ def apply_manual_plan_change(
     *,
     plan_code: PlanCode,
     entitlement_status: EntitlementStatus | None = None,
+    now: datetime | None = None,
 ) -> None:
     """Apply an administrator plan change with immediately usable defaults."""
     entitlement.plan_code = plan_code
@@ -75,5 +76,16 @@ def apply_manual_plan_change(
 
     if entitlement.status == EntitlementStatus.ACTIVE and plan_code == PlanCode.PRO:
         entitlement.trial_ends_at = None
+
+        # A manual administrator activation must not be immediately undone by
+        # a stale expiry left on a legacy or previously-paid entitlement.
+        # Preserve a future expiry; only discard one that has already elapsed.
+        if entitlement.paid_until is not None:
+            effective_now = now or datetime.now(timezone.utc)
+            paid_until = entitlement.paid_until
+            if paid_until.tzinfo is None:
+                paid_until = paid_until.replace(tzinfo=timezone.utc)
+            if paid_until <= effective_now:
+                entitlement.paid_until = None
     elif entitlement.status != EntitlementStatus.TRIAL:
         entitlement.trial_ends_at = None
