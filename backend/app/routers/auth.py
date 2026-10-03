@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.request_meta import client_ip, user_agent
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
+from app.dependencies.admin import get_current_admin
 from app.dependencies.auth import get_current_user
 from app.models.user import SecurityAuditEvent, User, UserLocation, UserStatus
 from app.schemas.auth import (
@@ -550,6 +551,29 @@ async def logout(
         )
         await db.commit()
     return GenericAuthMessage(message="Signed out successfully.")
+
+
+@router.post("/admin/logout", response_model=GenericAuthMessage)
+async def admin_logout(
+    request: Request,
+    user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> GenericAuthMessage:
+    user.token_version += 1
+    await revoke_all_refresh_sessions(db, user_id=user.id)
+
+    db.add(
+        SecurityAuditEvent(
+            user_id=user.id,
+            event_type="admin_logout",
+            description="Administrator signed out and invalidated active access tokens.",
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+    )
+    await db.commit()
+
+    return GenericAuthMessage(message="Administrator signed out successfully.")
 
 
 @router.post("/admin/mfa/request", response_model=OtpRequestResponse)
