@@ -102,6 +102,7 @@ async def verify_otp(
         )
         .order_by(AuthOtpChallenge.created_at.desc())
         .limit(1)
+        .with_for_update()
     )
 
     if challenge is None:
